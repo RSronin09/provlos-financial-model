@@ -709,12 +709,8 @@ async function processCommand(input: string): Promise<{ message: string; action?
     }
 
     if (lower.includes("setting") || lower.includes("config")) {
-      const milesFromJobTypes = storage
-        .getJobTypes()
-        .filter((j) => j.isActive)
-        .reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
       return {
-        message: `**Business Settings:**\n\n- Business: ${settings.businessName}\n- State: ${settings.state}\n- Fleet: ${settings.fleetSize} trucks\n- Avg Miles/Truck/Month: ${milesFromJobTypes.toLocaleString()}\n- Avg MPG: ${settings.avgMpg}\n- Monthly Revenue: $${settings.monthlyRevenue.toLocaleString()}\n- Growth Rate: ${(settings.revenueGrowthRate * 100).toFixed(1)}%/year`,
+        message: `**Business Settings:**\n\n- Business: ${settings.businessName}\n- State: ${settings.state}\n- Fleet: ${settings.fleetSize} trucks\n- Avg Miles/Truck/Month: ${jobTypeTotalMiles.toLocaleString()}\n- Avg MPG: ${settings.avgMpg}\n- Monthly Revenue: $${settings.monthlyRevenue.toLocaleString()}\n- Growth Rate: ${(settings.revenueGrowthRate * 100).toFixed(1)}%/year`,
       };
     }
   }

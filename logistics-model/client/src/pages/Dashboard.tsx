@@ -64,9 +64,13 @@ export default function Dashboard() {
     );
   }
 
-  const { profitability, expenses, fuelCost, scenarioProjections, annualProjection, settings } = data;
+  const { profitability, expenses, fuelCost, scenarioProjections, annualProjection, settings, driverTimeline } = data;
 
-  // Expense breakdown for pie chart
+  // Current month fleet size (Month 1 = settings.fleetSize; first milestone may apply)
+  const fleetByMonth: number[] = driverTimeline?.fleetByMonth ?? Array(12).fill(settings?.fleetSize ?? 1);
+  const currentFleet = fleetByMonth[0]; // Month 1 fleet for dashboard figures
+
+  // Expense breakdown for pie chart — use computedAmount for variable expenses
   const pieData = [
     { name: "Fixed", value: expenses.totalFixed },
     { name: "Variable", value: expenses.totalVariable },
@@ -74,10 +78,19 @@ export default function Dashboard() {
   ];
 
   // Expense detail for bar chart
+  // Variable expenses use computedAmount (ratePerMile × miles), NOT flat amount (which is 0 for per-mile items)
   const expenseBarData = [
-    ...expenses.fixed.map((e: any) => ({ name: e.name, amount: e.amount, type: "Fixed" })),
-    ...expenses.variable.map((e: any) => ({ name: e.name, amount: e.amount, type: "Variable" })),
-    { name: "Fuel (Live)", amount: expenses.monthlyFuelCost, type: "Fuel" },
+    ...expenses.fixed.map((e: any) => ({
+      name: e.name + (e.scalesWithFleet ? " (×fleet)" : ""),
+      amount: e.scalesWithFleet ? e.amount * currentFleet : e.amount,
+      type: "Fixed",
+    })),
+    ...expenses.variable.map((e: any) => ({
+      name: e.ratePerMile ? `${e.name} ($${e.ratePerMile}/mi)` : e.name,
+      amount: (e.computedAmount ?? e.amount) * currentFleet,
+      type: "Variable",
+    })),
+    { name: `Fuel (${fuelCost.costPerGallon?.toFixed(2)}/gal live)`, amount: expenses.monthlyFuelCost * currentFleet, type: "Fuel" },
   ].sort((a: any, b: any) => b.amount - a.amount);
 
   // Base scenario projection for line chart
@@ -317,7 +330,10 @@ export default function Dashboard() {
         {/* Monthly P&L Bar */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Revenue vs Expenses</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              Revenue vs Expenses
+              {currentFleet > 1 && <span className="ml-2 text-xs font-normal text-muted-foreground">({currentFleet} vehicles — Month 1)</span>}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
@@ -327,7 +343,7 @@ export default function Dashboard() {
                   { name: "Fixed", amount: expenses.totalFixed },
                   { name: "Variable", amount: expenses.totalVariable },
                   { name: "Fuel", amount: expenses.monthlyFuelCost },
-                  { name: "Profit", amount: profitability.monthlyProfit },
+                  { name: "Net Profit", amount: profitability.monthlyProfit },
                 ]}
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,85%)" />
@@ -387,7 +403,10 @@ export default function Dashboard() {
         {/* Expense Detail Bar Chart */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">All Expenses (Monthly)</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              All Expenses — Month 1
+              {currentFleet > 1 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({currentFleet} vehicles)</span>}
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={340}>
