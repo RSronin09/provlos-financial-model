@@ -320,6 +320,7 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
       id: editId,
       data: {
         name: editData.name,
+        baseRatePerMile: 2.40,
         avgMilesPerRun: parseFloat(editData.avgMilesPerRun) || 0,
         runsPerMonth: 0,
         jobMixPct: parseFloat(editData.jobMixPct) || 0,
@@ -336,8 +337,9 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
     if (!newJT.name) return;
     addMut.mutate({
       name: newJT.name,
+      baseRatePerMile: 2.40,
       avgMilesPerRun: parseFloat(newJT.avgMilesPerRun) || 200,
-      runsPerMonth: 0, // derived from miles
+      runsPerMonth: 0,
       jobMixPct: parseFloat(newJT.jobMixPct) || 20,
       complexityFactor: (parseFloat(newJT.complexityFactor) || 0) / 100,
       urgencyFactor: (parseFloat(newJT.urgencyFactor) || 0) / 100,

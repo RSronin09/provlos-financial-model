@@ -30,35 +30,37 @@ async function fetchGasPrice(state: string): Promise<{ price: number; source: st
     return { price: gasCache.price, source: gasCache.source };
   }
 
-  // Try fetching live from AAA state page
-  try {
-    const stateSlug = state.toLowerCase();
-    const url = `https://gasprices.aaa.com/?state=${stateSlug}`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(8000),
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; FleetFinance/1.0)" },
-    });
-    if (res.ok) {
-      const html = await res.text();
-      // AAA embeds price in a meta tag or visible span: e.g. "$4.232"
-      const match = html.match(/Current Avg\.?[^$]*\$(\d+\.\d{3})/i)
-        || html.match(/today[^$]*\$(\d+\.\d{3})/i)
-        || html.match(/\$(\d+\.\d{3})/g)?.[0]?.match(/(\d+\.\d{3})/);
-      if (match) {
-        const price = parseFloat(match[1]);
-        if (price > 1.5 && price < 10) {
-          gasCache = { price, state, timestamp: Date.now(), source: "AAA (live)" };
-          return { price, source: "AAA (live)" };
+  // Only attempt live AAA fetch when not in a serverless/Vercel environment
+  // (outbound HTTP to third-party sites is blocked in Vercel Edge/Serverless)
+  if (!process.env.VERCEL) {
+    try {
+      const stateSlug = state.toLowerCase();
+      const url = `https://gasprices.aaa.com/?state=${stateSlug}`;
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(8000),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; FleetFinance/1.0)" },
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const match = html.match(/Current Avg\.?[^$]*\$(\d+\.\d{3})/i)
+          || html.match(/today[^$]*\$(\d+\.\d{3})/i)
+          || html.match(/\$(\d+\.\d{3})/g)?.[0]?.match(/(\d+\.\d{3})/);
+        if (match) {
+          const price = parseFloat(match[1]);
+          if (price > 1.5 && price < 10) {
+            gasCache = { price, state, timestamp: Date.now(), source: "AAA (live)" };
+            return { price, source: "AAA (live)" };
+          }
         }
       }
+    } catch (e) {
+      // silent fallthrough to static table
     }
-  } catch (e) {
-    // silent fallthrough to static table
   }
 
   // Use accurate AAA static table (updated April 3, 2026)
   const price = AAA_STATE_PRICES[state] ?? NATIONAL_AVERAGE;
-  const source = AAA_STATE_PRICES[state] ? `AAA state avg — ${state}` : "AAA national avg";
+  const source = AAA_STATE_PRICES[state] ? `AAA avg — ${state}` : "AAA national avg";
   gasCache = { price, state, timestamp: Date.now(), source };
   return { price, source };
 }
