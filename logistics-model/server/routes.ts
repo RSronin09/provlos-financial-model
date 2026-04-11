@@ -65,15 +65,15 @@ async function fetchGasPrice(state: string): Promise<{ price: number; source: st
 
 export async function registerRoutes(server: Server, app: Express) {
   // === Business Settings ===
-  app.get("/api/settings", (_req, res) => {
-    const settings = storage.getSettings();
+  app.get("/api/settings", async (_req, res) => {
+    const settings = await storage.getSettings();
     res.json(settings || {});
   });
 
-  app.put("/api/settings", (req, res) => {
+  app.put("/api/settings", async (req, res) => {
     try {
       const data = insertBusinessSettingsSchema.parse(req.body);
-      const updated = storage.upsertSettings(data);
+      const updated = await storage.upsertSettings(data);
       res.json(updated);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -81,12 +81,12 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // PATCH just the use_of_proceeds field (called by Report page auto-save)
-  app.patch("/api/settings/use-of-proceeds", (req, res) => {
+  app.patch("/api/settings/use-of-proceeds", async (req, res) => {
     try {
       const { useOfProceeds } = z.object({ useOfProceeds: z.string() }).parse(req.body);
-      const current = storage.getSettings();
+      const current = await storage.getSettings();
       if (!current) return res.status(404).json({ error: "Settings not found" });
-      const updated = storage.upsertSettings({ ...current, useOfProceeds });
+      const updated = await storage.upsertSettings({ ...current, useOfProceeds });
       res.json({ useOfProceeds: updated.useOfProceeds });
     } catch (e: any) {
       res.status(400).json({ error: e.message });
@@ -94,104 +94,104 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === Expenses ===
-  app.get("/api/expenses", (_req, res) => {
-    res.json(storage.getExpenses());
+  app.get("/api/expenses", async (_req, res) => {
+    res.json(await storage.getExpenses());
   });
 
-  app.post("/api/expenses", (req, res) => {
+  app.post("/api/expenses", async (req, res) => {
     try {
       const data = insertExpenseSchema.parse(req.body);
-      const created = storage.createExpense(data);
+      const created = await storage.createExpense(data);
       res.json(created);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  app.put("/api/expenses/:id", (req, res) => {
+  app.put("/api/expenses/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const updated = storage.updateExpense(id, req.body);
+    const updated = await storage.updateExpense(id, req.body);
     if (!updated) return res.status(404).json({ error: "Expense not found" });
     res.json(updated);
   });
 
-  app.delete("/api/expenses/:id", (req, res) => {
+  app.delete("/api/expenses/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    storage.deleteExpense(id);
+    await storage.deleteExpense(id);
     res.json({ success: true });
   });
 
   // === Driver Milestones ===
-  app.get("/api/driver-milestones", (_req, res) => {
-    res.json(storage.getDriverMilestones());
+  app.get("/api/driver-milestones", async (_req, res) => {
+    res.json(await storage.getDriverMilestones());
   });
 
-  app.post("/api/driver-milestones", (req, res) => {
+  app.post("/api/driver-milestones", async (req, res) => {
     try {
       const data = insertDriverMilestoneSchema.parse(req.body);
-      res.json(storage.createDriverMilestone(data));
+      res.json(await storage.createDriverMilestone(data));
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
 
-  app.put("/api/driver-milestones/:id", (req, res) => {
-    const updated = storage.updateDriverMilestone(parseInt(req.params.id), req.body);
+  app.put("/api/driver-milestones/:id", async (req, res) => {
+    const updated = await storage.updateDriverMilestone(parseInt(req.params.id), req.body);
     res.json(updated);
   });
 
-  app.delete("/api/driver-milestones/:id", (req, res) => {
-    storage.deleteDriverMilestone(parseInt(req.params.id));
+  app.delete("/api/driver-milestones/:id", async (req, res) => {
+    await storage.deleteDriverMilestone(parseInt(req.params.id));
     res.json({ success: true });
   });
 
   // === Job Types ===
-  app.get("/api/job-types", (_req, res) => {
-    res.json(storage.getJobTypes());
+  app.get("/api/job-types", async (_req, res) => {
+    res.json(await storage.getJobTypes());
   });
 
-  app.post("/api/job-types", (req, res) => {
+  app.post("/api/job-types", async (req, res) => {
     try {
       const data = insertJobTypeSchema.parse(req.body);
-      const created = storage.createJobType(data);
+      const created = await storage.createJobType(data);
       res.json(created);
     } catch (e: any) { res.status(400).json({ error: e.message }); }
   });
 
-  app.put("/api/job-types/:id", (req, res) => {
+  app.put("/api/job-types/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const updated = storage.updateJobType(id, req.body);
+    const updated = await storage.updateJobType(id, req.body);
     res.json(updated);
   });
 
-  app.delete("/api/job-types/:id", (req, res) => {
-    storage.deleteJobType(parseInt(req.params.id));
+  app.delete("/api/job-types/:id", async (req, res) => {
+    await storage.deleteJobType(parseInt(req.params.id));
     res.json({ success: true });
   });
 
   // === Scenarios ===
-  app.get("/api/scenarios", (_req, res) => {
-    res.json(storage.getScenarios());
+  app.get("/api/scenarios", async (_req, res) => {
+    res.json(await storage.getScenarios());
   });
 
-  app.post("/api/scenarios", (req, res) => {
+  app.post("/api/scenarios", async (req, res) => {
     try {
       const data = insertScenarioSchema.parse(req.body);
-      const created = storage.createScenario(data);
+      const created = await storage.createScenario(data);
       res.json(created);
     } catch (e: any) {
       res.status(400).json({ error: e.message });
     }
   });
 
-  app.put("/api/scenarios/:id", (req, res) => {
+  app.put("/api/scenarios/:id", async (req, res) => {
     const id = parseInt(req.params.id);
-    const updated = storage.updateScenario(id, req.body);
+    const updated = await storage.updateScenario(id, req.body);
     if (!updated) return res.status(404).json({ error: "Scenario not found" });
     res.json(updated);
   });
 
   // === Live Gas Price ===
   app.get("/api/gas-price", async (_req, res) => {
-    const settings = storage.getSettings();
+    const settings = await storage.getSettings();
     const state = settings?.state || "FL";
     const { price, source } = await fetchGasPrice(state);
     res.json({
@@ -206,11 +206,11 @@ export async function registerRoutes(server: Server, app: Express) {
 
   // === Financial Summary / Report Data ===
   app.get("/api/financial-summary", async (_req, res) => {
-    const settings = storage.getSettings();
+    const settings = await storage.getSettings();
     if (!settings) return res.status(500).json({ error: "No settings configured" });
 
-    const allExpenses = storage.getExpenses().filter((e) => e.isActive);
-    const allScenarios = storage.getScenarios();
+    const allExpenses = (await storage.getExpenses()).filter((e) => e.isActive);
+    const allScenarios = await storage.getScenarios();
     const { price: gasPrice, source: gasPriceSource } = await fetchGasPrice(settings.state);
 
     // ═════════════════════════════════════════════════════════
@@ -268,7 +268,7 @@ export async function registerRoutes(server: Server, app: Express) {
     const month1FuelCost = (milesByMonth[0] / settings.avgMpg) * gasPrice * (month1EffectiveFleet / autoDriverCount);
 
     // Active job types
-    const activeJobTypes = storage.getJobTypes().filter((j) => j.isActive);
+    const activeJobTypes = (await storage.getJobTypes()).filter((j) => j.isActive);
 
     // Total mix % (may not be exactly 100 if user hasn't balanced yet)
     const totalMixPct = activeJobTypes.reduce((s, j) => s + (j.jobMixPct ?? 0), 0);
@@ -655,27 +655,24 @@ export async function registerRoutes(server: Server, app: Express) {
   });
 
   // === Chat / Command Processing ===
-  app.get("/api/chat", (_req, res) => {
-    res.json(storage.getChatMessages());
+  app.get("/api/chat", async (_req, res) => {
+    res.json(await storage.getChatMessages());
   });
 
   app.post("/api/chat", async (req, res) => {
     const { message } = req.body;
     if (!message) return res.status(400).json({ error: "Message required" });
 
-    // Save user message
-    storage.createChatMessage({
+    await storage.createChatMessage({
       role: "user",
       content: message,
       timestamp: new Date().toISOString(),
       actionTaken: null,
     });
 
-    // Process command
     const response = await processCommand(message);
 
-    // Save assistant response
-    const saved = storage.createChatMessage({
+    const saved = await storage.createChatMessage({
       role: "assistant",
       content: response.message,
       timestamp: new Date().toISOString(),
@@ -685,8 +682,8 @@ export async function registerRoutes(server: Server, app: Express) {
     res.json(saved);
   });
 
-  app.delete("/api/chat", (_req, res) => {
-    storage.clearChatMessages();
+  app.delete("/api/chat", async (_req, res) => {
+    await storage.clearChatMessages();
     res.json({ success: true });
   });
 }
@@ -694,8 +691,8 @@ export async function registerRoutes(server: Server, app: Express) {
 // Simple NLP-style command processor
 async function processCommand(input: string): Promise<{ message: string; action?: any }> {
   const lower = input.toLowerCase().trim();
-  const settings = storage.getSettings()!;
-  const allExpenses = storage.getExpenses();
+  const settings = (await storage.getSettings())!;
+  const allExpenses = await storage.getExpenses();
 
   // --- ADD EXPENSE ---
   if (lower.includes("add") && (lower.includes("expense") || lower.includes("cost"))) {
@@ -727,7 +724,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       };
     }
 
-    const created = storage.createExpense({ name, category, amount, description: "", isActive: true });
+    const created = await storage.createExpense({ name, category, amount, description: "", isActive: true });
     return {
       message: `Done. Added **${name}** as a **${category}** expense at **$${amount.toLocaleString()}/month**.\n\nYour total monthly expenses are now **$${allExpenses.filter(e => e.isActive).reduce((s, e) => s + e.amount, 0) + amount}**.`,
       action: { type: "expense_added", expense: created },
@@ -740,7 +737,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       lower.includes(e.name.toLowerCase())
     );
     if (expense) {
-      storage.deleteExpense(expense.id);
+      await storage.deleteExpense(expense.id);
       return {
         message: `Removed **${expense.name}** ($${expense.amount}/month) from your expenses.`,
         action: { type: "expense_deleted", id: expense.id, name: expense.name },
@@ -758,7 +755,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const amountMatch = input.match(/\$?([\d,]+(?:\.\d{1,2})?)/);
       if (amountMatch) {
         const newRevenue = parseFloat(amountMatch[1].replace(/,/g, ""));
-        storage.upsertSettings({ ...settings, monthlyRevenue: newRevenue });
+        await storage.upsertSettings({ ...settings, monthlyRevenue: newRevenue });
         return {
           message: `Updated monthly revenue to **$${newRevenue.toLocaleString()}**. Your financial projections will update automatically.`,
           action: { type: "revenue_updated", newRevenue },
@@ -771,7 +768,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const numMatch = input.match(/(\d+)\s*(?:truck|vehicle)/i);
       if (numMatch) {
         const newFleet = parseInt(numMatch[1]);
-        storage.upsertSettings({ ...settings, fleetSize: newFleet });
+        await storage.upsertSettings({ ...settings, fleetSize: newFleet });
         return {
           message: `Updated fleet size to **${newFleet} trucks**. Fuel cost projections will recalculate based on this.`,
           action: { type: "fleet_updated", newFleet },
@@ -784,7 +781,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const numMatch = input.match(/([\d.]+)\s*(?:mpg|miles)/i);
       if (numMatch) {
         const newMpg = parseFloat(numMatch[1]);
-        storage.upsertSettings({ ...settings, avgMpg: newMpg });
+        await storage.upsertSettings({ ...settings, avgMpg: newMpg });
         return {
           message: `Updated average fuel efficiency to **${newMpg} MPG**. This directly affects your fuel cost calculations.`,
           action: { type: "mpg_updated", newMpg },
@@ -807,7 +804,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const pctMatch = input.match(/([\d.]+)\s*%/);
       if (pctMatch) {
         const newRate = parseFloat(pctMatch[1]) / 100;
-        storage.upsertSettings({ ...settings, revenueGrowthRate: newRate });
+        await storage.upsertSettings({ ...settings, revenueGrowthRate: newRate });
         return {
           message: `Updated revenue growth rate to **${(newRate * 100).toFixed(1)}%** annually. Scenario projections will reflect this change.`,
           action: { type: "growth_updated", newRate },
@@ -820,7 +817,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const stateMatch = input.match(/(?:to|=)\s*([A-Z]{2})/i);
       if (stateMatch) {
         const newState = stateMatch[1].toUpperCase();
-        storage.upsertSettings({ ...settings, state: newState });
+        await storage.upsertSettings({ ...settings, state: newState });
         return {
           message: `Updated state to **${newState}**. Gas prices will now reflect ${newState} pricing.`,
           action: { type: "state_updated", newState },
@@ -834,7 +831,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const amountMatch = input.match(/\$?([\d,]+(?:\.\d{1,2})?)/);
       if (amountMatch) {
         const newAmount = parseFloat(amountMatch[1].replace(/,/g, ""));
-        storage.updateExpense(expense.id, { amount: newAmount });
+        await storage.updateExpense(expense.id, { amount: newAmount });
         return {
           message: `Updated **${expense.name}** from $${expense.amount}/mo to **$${newAmount.toLocaleString()}/mo**.`,
           action: { type: "expense_updated", id: expense.id, name: expense.name, oldAmount: expense.amount, newAmount },
@@ -854,7 +851,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
       const variable = allExpenses.filter((e) => e.category === "variable" && e.isActive);
 
       const { price: gasPrice } = await fetchGasPrice(settings.state);
-      const jtMiles = storage.getJobTypes().filter(j => j.isActive).reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
+      const jtMiles = (await storage.getJobTypes()).filter(j => j.isActive).reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
       const gallons = jtMiles / settings.avgMpg;
       const fuelCost = gallons * gasPrice;
 
@@ -868,7 +865,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
     }
 
     if (lower.includes("scenario")) {
-      const scenarios = storage.getScenarios();
+      const scenarios = await storage.getScenarios();
       let msg = `**Your Scenarios:**\n\n`;
       scenarios.forEach((s) => {
         msg += `- **${s.name}**: Revenue ×${s.revenueMultiplier}, Expenses ×${s.expenseMultiplier}${s.fuelPriceOverride ? ` (fuel @ $${s.fuelPriceOverride})` : " (live fuel)"} — ${s.description}\n`;
@@ -886,7 +883,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
   // --- GAS PRICE ---
   if (lower.includes("gas") || lower.includes("fuel") || lower.includes("gallon")) {
     const { price, source: priceSource } = await fetchGasPrice(settings.state);
-    const jtMiles = storage.getJobTypes().filter(j => j.isActive).reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
+    const jtMiles = (await storage.getJobTypes()).filter(j => j.isActive).reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
       const gallons = jtMiles / settings.avgMpg;
     const monthlyCost = gallons * price;
     return {
@@ -897,7 +894,7 @@ async function processCommand(input: string): Promise<{ message: string; action?
   // --- PROFIT / SUMMARY ---
   if (lower.includes("profit") || lower.includes("margin") || lower.includes("summary") || lower.includes("bottom line") || lower.includes("how am i doing") || lower.includes("overview")) {
     const { price: gasPrice } = await fetchGasPrice(settings.state);
-    const jtMiles = storage.getJobTypes().filter(j => j.isActive).reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
+    const jtMiles = (await storage.getJobTypes()).filter(j => j.isActive).reduce((s, j) => s + j.avgMilesPerRun * j.runsPerMonth, 0);
       const gallons = jtMiles / settings.avgMpg;
     const fuelCost = gallons * gasPrice;
     const totalExpenses = allExpenses.filter(e => e.isActive).reduce((s, e) => s + e.amount, 0) + fuelCost;

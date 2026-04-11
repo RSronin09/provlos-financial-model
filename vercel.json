@@ -1,13 +1,13 @@
 {
   "installCommand": "cd logistics-model && npm install",
-  "buildCommand": "cd logistics-model && npm run build && npx drizzle-kit push",
+  "buildCommand": "cd logistics-model && npm run build",
   "outputDirectory": "logistics-model/dist/public",
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api" }
   ],
   "functions": {
     "api/index.ts": {
-      "includeFiles": "logistics-model/dist/public/**,logistics-model/data.db"
+      "includeFiles": "logistics-model/dist/public/**"
     }
   }
 }

@@ -1,8 +1,5 @@
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
-import fs from "fs";
-import path from "path";
-import { vercelAppRoot } from "./vercelPaths";
+import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client";
 import { eq } from "drizzle-orm";
 import {
   businessSettings,
@@ -25,183 +22,172 @@ import {
   type ChatMessage,
 } from "@shared/schema";
 
-function resolveDbPath(): string {
-  if (!process.env.VERCEL) {
-    return "data.db";
-  }
-  const runtime = "/tmp/data.db";
-  const bundled = path.join(vercelAppRoot(), "data.db");
-  if (!fs.existsSync(runtime) && fs.existsSync(bundled)) {
-    fs.copyFileSync(bundled, runtime);
-  }
-  return runtime;
-}
-
-const sqlite = new Database(resolveDbPath());
-const db = drizzle(sqlite);
+const client = createClient({
+  url: process.env.TURSO_DATABASE_URL ?? "file:local.db",
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+const db = drizzle(client);
 
 // ── Schema migrations (add columns if they don't exist yet) ──
-try { sqlite.exec(`ALTER TABLE business_settings ADD COLUMN truck_down_payment REAL NOT NULL DEFAULT 5000`); } catch {}
-try { sqlite.exec(`ALTER TABLE business_settings ADD COLUMN monthly_lease_payment REAL NOT NULL DEFAULT 800`); } catch {}
+async function runMigrations() {
+  try { await client.execute(`ALTER TABLE business_settings ADD COLUMN truck_down_payment REAL NOT NULL DEFAULT 5000`); } catch {}
+  try { await client.execute(`ALTER TABLE business_settings ADD COLUMN monthly_lease_payment REAL NOT NULL DEFAULT 800`); } catch {}
+}
+runMigrations().catch(() => {});
 
 export interface IStorage {
-  // Business Settings
-  getSettings(): BusinessSettings | undefined;
-  upsertSettings(data: InsertBusinessSettings): BusinessSettings;
-
-  // Expenses
-  getExpenses(): Expense[];
-  getExpense(id: number): Expense | undefined;
-  createExpense(data: InsertExpense): Expense;
-  updateExpense(id: number, data: Partial<InsertExpense>): Expense | undefined;
-  deleteExpense(id: number): void;
-
-  // Scenarios
-  getScenarios(): Scenario[];
-  getScenario(id: number): Scenario | undefined;
-  createScenario(data: InsertScenario): Scenario;
-  updateScenario(id: number, data: Partial<InsertScenario>): Scenario | undefined;
-  deleteScenario(id: number): void;
-
-  // Driver Milestones
-  getDriverMilestones(): DriverMilestone[];
-  createDriverMilestone(data: InsertDriverMilestone): DriverMilestone;
-  updateDriverMilestone(id: number, data: Partial<InsertDriverMilestone>): DriverMilestone | undefined;
-  deleteDriverMilestone(id: number): void;
-
-  // Job Types
-  getJobTypes(): JobType[];
-  getJobType(id: number): JobType | undefined;
-  createJobType(data: InsertJobType): JobType;
-  updateJobType(id: number, data: Partial<InsertJobType>): JobType | undefined;
-  deleteJobType(id: number): void;
-
-  // Chat
-  getChatMessages(): ChatMessage[];
-  createChatMessage(data: InsertChatMessage): ChatMessage;
-  clearChatMessages(): void;
+  getSettings(): Promise<BusinessSettings | undefined>;
+  upsertSettings(data: InsertBusinessSettings): Promise<BusinessSettings>;
+  getExpenses(): Promise<Expense[]>;
+  getExpense(id: number): Promise<Expense | undefined>;
+  createExpense(data: InsertExpense): Promise<Expense>;
+  updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense | undefined>;
+  deleteExpense(id: number): Promise<void>;
+  getScenarios(): Promise<Scenario[]>;
+  getScenario(id: number): Promise<Scenario | undefined>;
+  createScenario(data: InsertScenario): Promise<Scenario>;
+  updateScenario(id: number, data: Partial<InsertScenario>): Promise<Scenario | undefined>;
+  deleteScenario(id: number): Promise<void>;
+  getDriverMilestones(): Promise<DriverMilestone[]>;
+  createDriverMilestone(data: InsertDriverMilestone): Promise<DriverMilestone>;
+  updateDriverMilestone(id: number, data: Partial<InsertDriverMilestone>): Promise<DriverMilestone | undefined>;
+  deleteDriverMilestone(id: number): Promise<void>;
+  getJobTypes(): Promise<JobType[]>;
+  getJobType(id: number): Promise<JobType | undefined>;
+  createJobType(data: InsertJobType): Promise<JobType>;
+  updateJobType(id: number, data: Partial<InsertJobType>): Promise<JobType | undefined>;
+  deleteJobType(id: number): Promise<void>;
+  getChatMessages(): Promise<ChatMessage[]>;
+  createChatMessage(data: InsertChatMessage): Promise<ChatMessage>;
+  clearChatMessages(): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
-  // Business Settings
-  getSettings(): BusinessSettings | undefined {
-    return db.select().from(businessSettings).get();
+  async getSettings(): Promise<BusinessSettings | undefined> {
+    const rows = await db.select().from(businessSettings).limit(1);
+    return rows[0];
   }
 
-  upsertSettings(data: InsertBusinessSettings): BusinessSettings {
-    const existing = this.getSettings();
+  async upsertSettings(data: InsertBusinessSettings): Promise<BusinessSettings> {
+    const existing = await this.getSettings();
     if (existing) {
-      db.update(businessSettings).set(data).where(eq(businessSettings.id, existing.id)).run();
-      return db.select().from(businessSettings).where(eq(businessSettings.id, existing.id)).get()!;
+      await db.update(businessSettings).set(data).where(eq(businessSettings.id, existing.id));
+      const rows = await db.select().from(businessSettings).where(eq(businessSettings.id, existing.id));
+      return rows[0]!;
     }
-    return db.insert(businessSettings).values(data).returning().get();
+    const rows = await db.insert(businessSettings).values(data).returning();
+    return rows[0]!;
   }
 
-  // Expenses
-  getExpenses(): Expense[] {
-    return db.select().from(expenses).all();
+  async getExpenses(): Promise<Expense[]> {
+    return db.select().from(expenses);
   }
 
-  getExpense(id: number): Expense | undefined {
-    return db.select().from(expenses).where(eq(expenses.id, id)).get();
+  async getExpense(id: number): Promise<Expense | undefined> {
+    const rows = await db.select().from(expenses).where(eq(expenses.id, id));
+    return rows[0];
   }
 
-  createExpense(data: InsertExpense): Expense {
-    return db.insert(expenses).values(data).returning().get();
+  async createExpense(data: InsertExpense): Promise<Expense> {
+    const rows = await db.insert(expenses).values(data).returning();
+    return rows[0]!;
   }
 
-  updateExpense(id: number, data: Partial<InsertExpense>): Expense | undefined {
-    db.update(expenses).set(data).where(eq(expenses.id, id)).run();
+  async updateExpense(id: number, data: Partial<InsertExpense>): Promise<Expense | undefined> {
+    await db.update(expenses).set(data).where(eq(expenses.id, id));
     return this.getExpense(id);
   }
 
-  deleteExpense(id: number): void {
-    db.delete(expenses).where(eq(expenses.id, id)).run();
+  async deleteExpense(id: number): Promise<void> {
+    await db.delete(expenses).where(eq(expenses.id, id));
   }
 
-  // Scenarios
-  getScenarios(): Scenario[] {
-    return db.select().from(scenarios).all();
+  async getScenarios(): Promise<Scenario[]> {
+    return db.select().from(scenarios);
   }
 
-  getScenario(id: number): Scenario | undefined {
-    return db.select().from(scenarios).where(eq(scenarios.id, id)).get();
+  async getScenario(id: number): Promise<Scenario | undefined> {
+    const rows = await db.select().from(scenarios).where(eq(scenarios.id, id));
+    return rows[0];
   }
 
-  createScenario(data: InsertScenario): Scenario {
-    return db.insert(scenarios).values(data).returning().get();
+  async createScenario(data: InsertScenario): Promise<Scenario> {
+    const rows = await db.insert(scenarios).values(data).returning();
+    return rows[0]!;
   }
 
-  updateScenario(id: number, data: Partial<InsertScenario>): Scenario | undefined {
-    db.update(scenarios).set(data).where(eq(scenarios.id, id)).run();
+  async updateScenario(id: number, data: Partial<InsertScenario>): Promise<Scenario | undefined> {
+    await db.update(scenarios).set(data).where(eq(scenarios.id, id));
     return this.getScenario(id);
   }
 
-  deleteScenario(id: number): void {
-    db.delete(scenarios).where(eq(scenarios.id, id)).run();
+  async deleteScenario(id: number): Promise<void> {
+    await db.delete(scenarios).where(eq(scenarios.id, id));
   }
 
-  // Driver Milestones
-  getDriverMilestones(): DriverMilestone[] {
-    return db.select().from(driverMilestones).orderBy(driverMilestones.startMonth).all();
+  async getDriverMilestones(): Promise<DriverMilestone[]> {
+    return db.select().from(driverMilestones).orderBy(driverMilestones.startMonth);
   }
 
-  createDriverMilestone(data: InsertDriverMilestone): DriverMilestone {
-    return db.insert(driverMilestones).values(data).returning().get();
+  async createDriverMilestone(data: InsertDriverMilestone): Promise<DriverMilestone> {
+    const rows = await db.insert(driverMilestones).values(data).returning();
+    return rows[0]!;
   }
 
-  updateDriverMilestone(id: number, data: Partial<InsertDriverMilestone>): DriverMilestone | undefined {
-    db.update(driverMilestones).set(data).where(eq(driverMilestones.id, id)).run();
-    return db.select().from(driverMilestones).where(eq(driverMilestones.id, id)).get();
+  async updateDriverMilestone(id: number, data: Partial<InsertDriverMilestone>): Promise<DriverMilestone | undefined> {
+    await db.update(driverMilestones).set(data).where(eq(driverMilestones.id, id));
+    const rows = await db.select().from(driverMilestones).where(eq(driverMilestones.id, id));
+    return rows[0];
   }
 
-  deleteDriverMilestone(id: number): void {
-    db.delete(driverMilestones).where(eq(driverMilestones.id, id)).run();
+  async deleteDriverMilestone(id: number): Promise<void> {
+    await db.delete(driverMilestones).where(eq(driverMilestones.id, id));
   }
 
-  // Job Types
-  getJobTypes(): JobType[] {
-    return db.select().from(jobTypes).all();
+  async getJobTypes(): Promise<JobType[]> {
+    return db.select().from(jobTypes);
   }
 
-  getJobType(id: number): JobType | undefined {
-    return db.select().from(jobTypes).where(eq(jobTypes.id, id)).get();
+  async getJobType(id: number): Promise<JobType | undefined> {
+    const rows = await db.select().from(jobTypes).where(eq(jobTypes.id, id));
+    return rows[0];
   }
 
-  createJobType(data: InsertJobType): JobType {
-    return db.insert(jobTypes).values(data).returning().get();
+  async createJobType(data: InsertJobType): Promise<JobType> {
+    const rows = await db.insert(jobTypes).values(data).returning();
+    return rows[0]!;
   }
 
-  updateJobType(id: number, data: Partial<InsertJobType>): JobType | undefined {
-    db.update(jobTypes).set(data).where(eq(jobTypes.id, id)).run();
+  async updateJobType(id: number, data: Partial<InsertJobType>): Promise<JobType | undefined> {
+    await db.update(jobTypes).set(data).where(eq(jobTypes.id, id));
     return this.getJobType(id);
   }
 
-  deleteJobType(id: number): void {
-    db.delete(jobTypes).where(eq(jobTypes.id, id)).run();
+  async deleteJobType(id: number): Promise<void> {
+    await db.delete(jobTypes).where(eq(jobTypes.id, id));
   }
 
-  // Chat
-  getChatMessages(): ChatMessage[] {
-    return db.select().from(chatMessages).all();
+  async getChatMessages(): Promise<ChatMessage[]> {
+    return db.select().from(chatMessages);
   }
 
-  createChatMessage(data: InsertChatMessage): ChatMessage {
-    return db.insert(chatMessages).values(data).returning().get();
+  async createChatMessage(data: InsertChatMessage): Promise<ChatMessage> {
+    const rows = await db.insert(chatMessages).values(data).returning();
+    return rows[0]!;
   }
 
-  clearChatMessages(): void {
-    db.delete(chatMessages).run();
+  async clearChatMessages(): Promise<void> {
+    await db.delete(chatMessages);
   }
 }
 
 export const storage = new DatabaseStorage();
 
-// Seed default data
-function seedDefaults() {
-  const settings = storage.getSettings();
+// Seed default data on first run
+async function seedDefaults() {
+  const settings = await storage.getSettings();
   if (!settings) {
-    storage.upsertSettings({
+    await storage.upsertSettings({
       businessName: "My Logistics Co",
       state: "FL",
       fleetSize: 3,
@@ -211,29 +197,26 @@ function seedDefaults() {
     });
   }
 
-  const existingExpenses = storage.getExpenses();
+  const existingExpenses = await storage.getExpenses();
   if (existingExpenses.length === 0) {
-    // Seed default fixed expenses
-    storage.createExpense({ name: "Truck Lease Payments", category: "fixed", amount: 2200, description: "Monthly lease per truck", isActive: true });
-    storage.createExpense({ name: "Commercial Insurance", category: "fixed", amount: 1800, description: "Liability + cargo insurance per truck", isActive: true });
-    storage.createExpense({ name: "Registration & Permits", category: "fixed", amount: 250, description: "DOT, state permits, registration", isActive: true });
-    storage.createExpense({ name: "GPS/Telematics", category: "fixed", amount: 150, description: "Fleet tracking subscription", isActive: true });
-    storage.createExpense({ name: "Office & Admin", category: "fixed", amount: 1200, description: "Office rent, software, phone", isActive: true });
-    storage.createExpense({ name: "Driver Wages", category: "fixed", amount: 8500, description: "Base wages for drivers (total fleet)", isActive: true });
-
-    // Seed default variable expenses
-    storage.createExpense({ name: "Maintenance & Repairs", category: "variable", amount: 800, description: "Avg monthly across fleet", isActive: true });
-    storage.createExpense({ name: "Tires", category: "variable", amount: 400, description: "Monthly tire budget", isActive: true });
-    storage.createExpense({ name: "Tolls & Parking", category: "variable", amount: 350, description: "Route-dependent tolls", isActive: true });
-    storage.createExpense({ name: "Driver Overtime / Bonuses", category: "variable", amount: 600, description: "Performance bonuses, overtime", isActive: true });
+    await storage.createExpense({ name: "Truck Lease Payments", category: "fixed", amount: 2200, description: "Monthly lease per truck", isActive: true });
+    await storage.createExpense({ name: "Commercial Insurance", category: "fixed", amount: 1800, description: "Liability + cargo insurance per truck", isActive: true });
+    await storage.createExpense({ name: "Registration & Permits", category: "fixed", amount: 250, description: "DOT, state permits, registration", isActive: true });
+    await storage.createExpense({ name: "GPS/Telematics", category: "fixed", amount: 150, description: "Fleet tracking subscription", isActive: true });
+    await storage.createExpense({ name: "Office & Admin", category: "fixed", amount: 1200, description: "Office rent, software, phone", isActive: true });
+    await storage.createExpense({ name: "Driver Wages", category: "fixed", amount: 8500, description: "Base wages for drivers (total fleet)", isActive: true });
+    await storage.createExpense({ name: "Maintenance & Repairs", category: "variable", amount: 800, description: "Avg monthly across fleet", isActive: true });
+    await storage.createExpense({ name: "Tires", category: "variable", amount: 400, description: "Monthly tire budget", isActive: true });
+    await storage.createExpense({ name: "Tolls & Parking", category: "variable", amount: 350, description: "Route-dependent tolls", isActive: true });
+    await storage.createExpense({ name: "Driver Overtime / Bonuses", category: "variable", amount: 600, description: "Performance bonuses, overtime", isActive: true });
   }
 
-  const existingScenarios = storage.getScenarios();
+  const existingScenarios = await storage.getScenarios();
   if (existingScenarios.length === 0) {
-    storage.createScenario({ name: "Best Case", revenueMultiplier: 1.2, expenseMultiplier: 0.9, fuelPriceOverride: null, description: "Higher demand, efficient operations" });
-    storage.createScenario({ name: "Base Case", revenueMultiplier: 1.0, expenseMultiplier: 1.0, fuelPriceOverride: null, description: "Current trajectory" });
-    storage.createScenario({ name: "Worst Case", revenueMultiplier: 0.8, expenseMultiplier: 1.15, fuelPriceOverride: null, description: "Recession, lower demand, higher costs" });
+    await storage.createScenario({ name: "Best Case", revenueMultiplier: 1.2, expenseMultiplier: 0.9, fuelPriceOverride: null, description: "Higher demand, efficient operations" });
+    await storage.createScenario({ name: "Base Case", revenueMultiplier: 1.0, expenseMultiplier: 1.0, fuelPriceOverride: null, description: "Current trajectory" });
+    await storage.createScenario({ name: "Worst Case", revenueMultiplier: 0.8, expenseMultiplier: 1.15, fuelPriceOverride: null, description: "Recession, lower demand, higher costs" });
   }
 }
 
-seedDefaults();
+seedDefaults().catch(console.error);
