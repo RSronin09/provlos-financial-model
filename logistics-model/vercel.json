@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build && rm -f data.db && npx drizzle-kit push",
+  "installCommand": "npm install",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": ["dist/public/**", "data.db"]
+    }
+  }
+}

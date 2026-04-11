@@ -1,5 +1,7 @@
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
+import fs from "fs";
+import path from "path";
 import { eq } from "drizzle-orm";
 import {
   businessSettings,
@@ -22,7 +24,19 @@ import {
   type ChatMessage,
 } from "@shared/schema";
 
-const sqlite = new Database("data.db");
+function resolveDbPath(): string {
+  if (!process.env.VERCEL) {
+    return "data.db";
+  }
+  const runtime = "/tmp/data.db";
+  const bundled = path.join(process.cwd(), "data.db");
+  if (!fs.existsSync(runtime) && fs.existsSync(bundled)) {
+    fs.copyFileSync(bundled, runtime);
+  }
+  return runtime;
+}
+
+const sqlite = new Database(resolveDbPath());
 const db = drizzle(sqlite);
 
 // ── Schema migrations (add columns if they don't exist yet) ──
