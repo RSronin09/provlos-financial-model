@@ -49,7 +49,9 @@ export const expenses = sqliteTable("expenses", {
   isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
 });
 
-export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });
+export const insertExpenseSchema = createInsertSchema(expenses, {
+  ratePerMile: z.number().nullable().optional(),
+}).omit({ id: true });
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
 
@@ -63,7 +65,9 @@ export const scenarios = sqliteTable("scenarios", {
   description: text("description").default(""),
 });
 
-export const insertScenarioSchema = createInsertSchema(scenarios).omit({ id: true });
+export const insertScenarioSchema = createInsertSchema(scenarios, {
+  fuelPriceOverride: z.number().nullable().optional(),
+}).omit({ id: true });
 export type InsertScenario = z.infer<typeof insertScenarioSchema>;
 export type Scenario = typeof scenarios.$inferSelect;
 

@@ -276,6 +276,7 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
       setNewJT({ name: "", avgMilesPerRun: "200", jobMixPct: "20", complexityFactor: "0", urgencyFactor: "0", deadheadPct: "15", fuelSurchargePerMile: "0.45", accessorialPerRun: "0" });
       toast({ title: "Job type added" });
     },
+    onError: (e: any) => toast({ title: "Failed to add job type", description: e.message, variant: "destructive" }),
   });
 
   const updateMut = useMutation({
@@ -949,9 +950,10 @@ export default function Settings() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/financial-summary"] });
-      setNewExpense({ name: "", category: "fixed", amount: "" });
+      setNewExpense({ name: "", category: "fixed", amount: "", ratePerMile: "", description: "" });
       toast({ title: "Expense added" });
     },
+    onError: (e: any) => toast({ title: "Failed to add expense", description: e.message, variant: "destructive" }),
   });
 
   const deleteExpenseMutation = useMutation({
