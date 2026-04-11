@@ -1,0 +1,10 @@
+{
+  "installCommand": "cd logistics-model && npm install",
+  "buildCommand": "cd logistics-model && npm run build && rm -f data.db && npx drizzle-kit push",
+  "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
+  "functions": {
+    "api/index.ts": {
+      "includeFiles": ["logistics-model/dist/public/**", "logistics-model/data.db"]
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+import { vercelAppRoot } from "./vercelPaths";
 import { eq } from "drizzle-orm";
 import {
   businessSettings,
@@ -29,7 +30,7 @@ function resolveDbPath(): string {
     return "data.db";
   }
   const runtime = "/tmp/data.db";
-  const bundled = path.join(process.cwd(), "data.db");
+  const bundled = path.join(vercelAppRoot(), "data.db");
   if (!fs.existsSync(runtime) && fs.existsSync(bundled)) {
     fs.copyFileSync(bundled, runtime);
   }
