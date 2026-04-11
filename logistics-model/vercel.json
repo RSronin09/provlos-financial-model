@@ -4,7 +4,7 @@
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "functions": {
     "api/index.ts": {
-      "includeFiles": ["dist/public/**", "data.db"]
+      "includeFiles": "dist/public/**,data.db"
     }
   }
 }
