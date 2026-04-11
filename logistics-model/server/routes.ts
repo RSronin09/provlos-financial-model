@@ -8,9 +8,24 @@ import { z } from "zod";
 let gasCache: { price: number; state: string; timestamp: number; source: string } | null = null;
 const GAS_CACHE_TTL = 60 * 60 * 1000; // 60 minutes
 
-// Current state-level regular gasoline averages sourced from AAA (April 3, 2026)
-// Used as accurate fallback when live fetch is unavailable
-const AAA_STATE_PRICES: Record<string, number> = {
+// EIA area codes for state-level data: "S" + state abbreviation
+// Falls back to national "NUS" if state not available
+const EIA_STATE_AREA: Record<string, string> = {
+  AK: "SAK", AL: "SAL", AR: "SAR", AZ: "SAZ", CA: "SCA",
+  CO: "SCO", CT: "SCT", DC: "SDC", DE: "SDE", FL: "SFL",
+  GA: "SGA", HI: "SHI", IA: "SIA", ID: "SID", IL: "SIL",
+  IN: "SIN", KS: "SKS", KY: "SKY", LA: "SLA", MA: "SMA",
+  MD: "SMD", ME: "SME", MI: "SMI", MN: "SMN", MO: "SMO",
+  MS: "SMS", MT: "SMT", NC: "SNC", ND: "SND", NE: "SNE",
+  NH: "SNH", NJ: "SNJ", NM: "SNM", NV: "SNV", NY: "SNY",
+  OH: "SOH", OK: "SOK", OR: "SOR", PA: "SPA", RI: "SRI",
+  SC: "SSC", SD: "SSD", TN: "STN", TX: "STX", UT: "SUT",
+  VA: "SVA", VT: "SVT", WA: "SWA", WI: "SWI", WV: "SWV",
+  WY: "SWY",
+};
+
+// Static fallback: AAA state averages (April 3, 2026) used when EIA key absent
+const FALLBACK_STATE_PRICES: Record<string, number> = {
   AK: 4.599, AL: 3.798, AR: 3.525, AZ: 4.688, CA: 5.891,
   CO: 3.830, CT: 4.024, DC: 4.200, DE: 3.884, FL: 4.232,
   GA: 3.701, HI: 5.503, IA: 3.480, ID: 4.268, IL: 4.266,
@@ -23,33 +38,54 @@ const AAA_STATE_PRICES: Record<string, number> = {
   VA: 4.009, VT: 3.992, WA: 5.365, WI: 3.792, WV: 3.909,
   WY: 3.839,
 };
-const NATIONAL_AVERAGE = 4.091; // AAA national average, April 3 2026
+const NATIONAL_AVERAGE = 4.091;
 
 async function fetchGasPrice(state: string): Promise<{ price: number; source: string }> {
   if (gasCache && gasCache.state === state && Date.now() - gasCache.timestamp < GAS_CACHE_TTL) {
     return { price: gasCache.price, source: gasCache.source };
   }
 
-  // Only attempt live AAA fetch when not in a serverless/Vercel environment
-  // (outbound HTTP to third-party sites is blocked in Vercel Edge/Serverless)
-  if (!process.env.VERCEL) {
+  const eiaKey = process.env.EIA_API_KEY;
+  if (eiaKey) {
     try {
-      const stateSlug = state.toLowerCase();
-      const url = `https://gasprices.aaa.com/?state=${stateSlug}`;
-      const res = await fetch(url, {
-        signal: AbortSignal.timeout(8000),
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; FleetFinance/1.0)" },
-      });
+      // Try state-level first, fall back to national US
+      const areaCode = EIA_STATE_AREA[state] ?? "NUS";
+      const url = `https://api.eia.gov/v2/petroleum/pri/gnd/data/?api_key=${eiaKey}` +
+        `&frequency=weekly&data[0]=value&facets[product][]=EPM0&facets[duoarea][]=${areaCode}` +
+        `&sort[0][column]=period&sort[0][direction]=desc&length=1`;
+
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
-        const html = await res.text();
-        const match = html.match(/Current Avg\.?[^$]*\$(\d+\.\d{3})/i)
-          || html.match(/today[^$]*\$(\d+\.\d{3})/i)
-          || html.match(/\$(\d+\.\d{3})/g)?.[0]?.match(/(\d+\.\d{3})/);
-        if (match) {
-          const price = parseFloat(match[1]);
+        const json: any = await res.json();
+        const row = json?.response?.data?.[0];
+        if (row?.value) {
+          const price = parseFloat(row.value);
           if (price > 1.5 && price < 10) {
-            gasCache = { price, state, timestamp: Date.now(), source: "AAA (live)" };
-            return { price, source: "AAA (live)" };
+            const period = row.period ?? "";
+            const source = `EIA weekly${period ? ` (${period})` : ""}`;
+            gasCache = { price, state, timestamp: Date.now(), source };
+            return { price, source };
+          }
+        }
+      }
+
+      // State not available in EIA — try national average
+      if (areaCode !== "NUS") {
+        const natUrl = `https://api.eia.gov/v2/petroleum/pri/gnd/data/?api_key=${eiaKey}` +
+          `&frequency=weekly&data[0]=value&facets[product][]=EPM0&facets[duoarea][]=NUS` +
+          `&sort[0][column]=period&sort[0][direction]=desc&length=1`;
+        const natRes = await fetch(natUrl, { signal: AbortSignal.timeout(8000) });
+        if (natRes.ok) {
+          const json: any = await natRes.json();
+          const row = json?.response?.data?.[0];
+          if (row?.value) {
+            const price = parseFloat(row.value);
+            if (price > 1.5 && price < 10) {
+              const period = row.period ?? "";
+              const source = `EIA national avg${period ? ` (${period})` : ""}`;
+              gasCache = { price, state, timestamp: Date.now(), source };
+              return { price, source };
+            }
           }
         }
       }
@@ -58,9 +94,11 @@ async function fetchGasPrice(state: string): Promise<{ price: number; source: st
     }
   }
 
-  // Use accurate AAA static table (updated April 3, 2026)
-  const price = AAA_STATE_PRICES[state] ?? NATIONAL_AVERAGE;
-  const source = AAA_STATE_PRICES[state] ? `AAA avg — ${state}` : "AAA national avg";
+  // Static fallback (no EIA key or fetch failed)
+  const price = FALLBACK_STATE_PRICES[state] ?? NATIONAL_AVERAGE;
+  const source = FALLBACK_STATE_PRICES[state]
+    ? `Static avg — ${state} (Apr 2026)`
+    : "Static national avg (Apr 2026)";
   gasCache = { price, state, timestamp: Date.now(), source };
   return { price, source };
 }
