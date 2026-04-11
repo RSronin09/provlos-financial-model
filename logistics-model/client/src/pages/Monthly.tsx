@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -198,6 +198,15 @@ export default function Monthly() {
   const { expenses, scenarioProjections, settings, profitability, revenueModel, driverTimeline } = data;
   const fleetByMonth: number[] = driverTimeline?.fleetByMonth ?? Array(12).fill(settings?.fleetSize ?? 1);
   const milestones: any[] = driverTimeline?.milestones ?? [];
+  const autoDriverCount: number = driverTimeline?.autoDriverCount ?? 1;
+  const isRampActive: boolean = driverTimeline?.isRampActive ?? false;
+  const totalMilesFromTimeline: number = driverTimeline?.totalMilesPerMonth ?? 0;
+  const milesByMonth: number[] = driverTimeline?.milesByMonth ?? Array(12).fill(totalMilesFromTimeline);
+  const driversByMonth: number[] = driverTimeline?.driversByMonth ?? Array(12).fill(autoDriverCount);
+  const rampMonthIndices: number[] = driverTimeline?.rampMonthIndices ?? [];
+  const milesIncrement: number = driverTimeline?.milesIncrement ?? 0;
+  // Base Case monthly data (includes weeklyBreakdown per month)
+  const baseMonths: any[] = scenarioProjections?.find((s: any) => s.name === "Base Case")?.months ?? [];
   const fixedExpenses: any[] = expenses.fixed ?? [];
   const variableExpenses: any[] = expenses.variable ?? [];
   const totalFixed: number = expenses.totalFixed;
@@ -308,6 +317,46 @@ export default function Monthly() {
       {/* ── SECTION 1: P&L Table ── */}
       <section data-testid="section-pl-table">
         <SectionTitle>Full 12-Month Profit &amp; Loss Statement (Base Case)</SectionTitle>
+        {/* Miles & driver banner */}
+        <div className="mb-3 p-3 rounded-lg border bg-primary/5 border-primary/20 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-semibold text-primary">
+              {milesIncrement !== 0
+                ? `Miles grow ${totalMilesFromTimeline.toLocaleString()} → ${(totalMilesFromTimeline + milesIncrement * 11).toLocaleString()} mi/mo (+${milesIncrement.toLocaleString()}/mo)`
+                : `${totalMilesFromTimeline.toLocaleString()} mi/mo (flat) → ${autoDriverCount} driver${autoDriverCount !== 1 ? "s" : ""}`
+              }
+            </span>
+            {isRampActive && (
+              <span className="text-amber-600 font-medium">
+                Ramp months: {rampMonthIndices.map(i => `M${i+1}`).join(', ')} — 10% → 25% → 65% → 100%
+              </span>
+            )}
+          </div>
+          {/* Per-month miles + driver row */}
+          <div className="flex gap-1">
+            {milesByMonth.map((miles, i) => {
+              const drivers = driversByMonth[i];
+              const isRamp = rampMonthIndices.includes(i);
+              const prevDrivers = i === 0 ? 1 : driversByMonth[i-1];
+              const driverChange = drivers > prevDrivers;
+              return (
+                <div key={i} className={`flex-1 text-center rounded py-1 ${
+                  isRamp ? 'bg-amber-500/15 border border-amber-500/30' :
+                  driverChange ? 'bg-primary/20' :
+                  'bg-muted/30'
+                }`}>
+                  <p className={`text-[8px] font-bold ${
+                    isRamp ? 'text-amber-600' : driverChange ? 'text-primary' : 'text-muted-foreground'
+                  }`}>
+                    {drivers}drv{isRamp ? '⇑' : ''}
+                  </p>
+                  <p className="text-[8px] text-muted-foreground">{(miles/1000).toFixed(0)}k</p>
+                  <p className="text-[7px] text-muted-foreground">M{i+1}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
         <Card>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
@@ -460,20 +509,51 @@ export default function Monthly() {
                       );
                     })}
                   </ExpandableRows>
-                  {/* Operating Income (EBIT) */}
+                  {/* Vehicle Lease — scales with active fleet */}
+                  <ExpandableRows
+                    label="Vehicle Lease Payments"
+                    values={plRows.map((m: any) => m.leasePayment ?? 0)}
+                    total={plRows.reduce((s: number, m: any) => s + (m.leasePayment ?? 0), 0)}
+                    valueClassName="text-muted-foreground"
+                  >
+                    <ChildRow
+                      label="Monthly lease × active trucks (scales with fleet)"
+                      values={plRows.map((m: any, i: number) => m.leasePayment ?? 0)}
+                      total={plRows.reduce((s: number, m: any) => s + (m.leasePayment ?? 0), 0)}
+                    />
+                  </ExpandableRows>
+
+                  {/* Operating Income (EBIT) — after all operating costs, before capex */}
                   <SubtotalRow
                     label="Operating Income (EBIT)"
-                    values={plRows.map((m: any) => m.profit)}
-                    total={totals.netProfit}
+                    values={plRows.map((m: any) => m.ebit ?? m.profit)}
+                    total={plRows.reduce((s: number, m: any) => s + (m.ebit ?? m.profit), 0)}
                   />
                   <MarginRow
                     label="Operating Margin %"
-                    values={plRows.map((m: any) => m.revenue > 0 ? (m.profit / m.revenue) * 100 : 0)}
-                    total={totals.revenue > 0 ? (totals.netProfit / totals.revenue) * 100 : 0}
+                    values={plRows.map((m: any) => m.revenue > 0 ? ((m.ebit ?? m.profit) / m.revenue) * 100 : 0)}
+                    total={(() => {
+                      const rev = plRows.reduce((s: number, m: any) => s + m.revenue, 0);
+                      const ebit = plRows.reduce((s: number, m: any) => s + (m.ebit ?? m.profit), 0);
+                      return rev > 0 ? (ebit / rev) * 100 : 0;
+                    })()}
                   />
 
                   {/* ── NET INCOME ── */}
                   <SectionHeaderRow label="NET INCOME" colCount={14} />
+                  {/* Vehicle Down Payments — one-time capex when new trucks acquired */}
+                  <ExpandableRows
+                    label="Vehicle Down Payments (Capital)"
+                    values={plRows.map((m: any) => m.downPayment ?? 0)}
+                    total={plRows.reduce((s: number, m: any) => s + (m.downPayment ?? 0), 0)}
+                    valueClassName="text-muted-foreground"
+                  >
+                    <ChildRow
+                      label="Down payment × new vehicles acquired (one-time per acquisition month)"
+                      values={plRows.map((m: any) => m.downPayment ?? 0)}
+                      total={plRows.reduce((s: number, m: any) => s + (m.downPayment ?? 0), 0)}
+                    />
+                  </ExpandableRows>
                   <ExpandableRows
                     label="Total Expenses"
                     values={plRows.map((m: any) => m.expenses)}
@@ -495,6 +575,107 @@ export default function Monthly() {
                     highlight
                   />
 
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* ── SECTION 1b: WEEKLY BREAKDOWN ── */}
+      <section data-testid="section-weekly">
+        <SectionTitle>Weekly Breakdown — All 12 Months (Base Case)</SectionTitle>
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="text-xs w-max min-w-full" data-testid="weekly-table">
+                <thead>
+                  <tr className="bg-muted/80 text-muted-foreground border-b-2 border-border">
+                    <th className={thSticky} style={{ minWidth: 80 }}>Month</th>
+                    <th className="text-center px-3 py-2 whitespace-nowrap font-semibold">Week</th>
+                    <th className="text-center px-3 py-2 whitespace-nowrap font-semibold">Miles/Wk</th>
+                    <th className="text-center px-3 py-2 whitespace-nowrap font-semibold">Drivers</th>
+                    <th className="text-center px-3 py-2 whitespace-nowrap font-semibold">Capacity</th>
+                    <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Revenue</th>
+                    <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Fuel</th>
+                    <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Variable</th>
+                    <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Fixed</th>
+                    <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Total Exp</th>
+                    <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Net Profit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {baseMonths.map((month: any, mi: number) => {
+                    const weeks: any[] = month.weeklyBreakdown ?? [];
+                    const monthTotal = {
+                      revenue: weeks.reduce((s, w) => s + w.revenue, 0),
+                      expenses: weeks.reduce((s, w) => s + w.expenses, 0),
+                      profit: weeks.reduce((s, w) => s + w.profit, 0),
+                      fuel: weeks.reduce((s, w) => s + w.fuel, 0),
+                    };
+                    return weeks.map((week: any, wi: number) => {
+                      const isLastWeek = wi === weeks.length - 1;
+                      const isRampMonth = month.isRampMonth;
+                      return (
+                        <React.Fragment key={`${mi}-${wi}`}>
+                          <tr key={`${mi}-${wi}`}
+                            className={`border-b border-border/20 ${
+                              isRampMonth ? (wi === 3 ? 'bg-chart-3/5' : 'bg-amber-500/5') : mi % 2 === 0 ? 'bg-muted/10' : ''
+                            }`}>
+                            {wi === 0 && (
+                              <td rowSpan={4}
+                                className={`sticky left-0 z-10 px-3 py-2 font-bold text-center border-r border-border/30 ${
+                                  mi % 2 === 0 ? 'bg-muted/20' : 'bg-background'
+                                }`}>
+                                M{mi + 1}
+                                {isRampMonth && (
+                                  <div className="text-[8px] text-amber-600 font-semibold mt-0.5">⇑ RAMP</div>
+                                )}
+                              </td>
+                            )}
+                            <td className="px-3 py-1.5 text-center font-medium">Wk {week.week}</td>
+                            <td className="px-3 py-1.5 text-center tabular-nums text-muted-foreground">
+                              {week.miles?.toLocaleString() ?? '—'}
+                            </td>
+                            <td className="px-3 py-1.5 text-center tabular-nums">
+                              <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                isRampMonth && wi < 3 ? 'bg-amber-100 text-amber-700' : 'bg-primary/10 text-primary'
+                              }`}>
+                                {week.driverCapacity}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-center tabular-nums">
+                              <span className={`text-[10px] font-semibold ${
+                                week.rampPct < 100 ? 'text-amber-600' : 'text-chart-3'
+                              }`}>{week.rampPct}%</span>
+                            </td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-chart-3 font-medium">{fmt(week.revenue)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(week.fuel)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(week.variable)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(week.fixed)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">({fmt(week.expenses)})</td>
+                            <td className={`px-3 py-1.5 text-right tabular-nums font-bold ${
+                              week.profit >= 0 ? 'text-chart-3' : 'text-destructive'
+                            }`}>{fmt(week.profit)}</td>
+                          </tr>
+                          {isLastWeek && (
+                            <tr className="bg-muted/40 border-b-2 border-border font-semibold text-xs">
+                              <td className="sticky left-0 z-10 bg-muted/40 px-3 py-1.5 text-center border-r border-border/30 text-[10px] text-muted-foreground">—</td>
+                              <td className="px-3 py-1.5 text-center text-[10px] text-muted-foreground" colSpan={2}>M{mi+1} Total</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-chart-3">{fmt(monthTotal.revenue)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(monthTotal.fuel)}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground"></td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground"></td>
+                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">({fmt(monthTotal.expenses)})</td>
+                              <td className={`px-3 py-1.5 text-right tabular-nums font-bold ${
+                                monthTotal.profit >= 0 ? 'text-chart-3' : 'text-destructive'
+                              }`}>{fmt(monthTotal.profit)}</td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    });
+                  })}
                 </tbody>
               </table>
             </div>
@@ -620,6 +801,150 @@ export default function Monthly() {
             </CardContent>
           </Card>
         </div>
+      </section>
+
+      {/* ── CASH FLOW SECTION ── */}
+      <section data-testid="section-cash-flow">
+        <SectionTitle>Monthly Cash Flow Statement (Base Case)</SectionTitle>
+        <Card>
+          <CardContent className="p-4">
+            {(() => {
+              let cumSum = 0;
+              const cfRows = plRows.map((m: any) => {
+                const operatingCF = m.ebit ?? m.profit;
+                const capex       = m.downPayment ?? 0;
+                const freeCF      = m.profit ?? 0;
+                cumSum += freeCF;
+                return { month: m.month, miles: m.miles ?? 0, drivers: m.drivers ?? 1, operatingCF, capex, freeCF, cumulative: cumSum };
+              });
+              const cfChartData = cfRows.map(r => ({
+                month: `M${r.month}`,
+                'Op. CF': r.operatingCF,
+                'Free CF': r.freeCF,
+                'CapEx': r.capex,
+                Cumulative: r.cumulative,
+              }));
+              const totalOpCF   = cfRows.reduce((s, r) => s + r.operatingCF, 0);
+              const totalCapex  = cfRows.reduce((s, r) => s + r.capex, 0);
+              const totalFreeCF = cfRows.reduce((s, r) => s + r.freeCF, 0);
+
+              return (
+                <>
+                  {/* KPI summary row */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                    {[
+                      { label: "Total Operating CF",    value: fmt(totalOpCF),                      note: "12-mo EBIT sum",      hi: true  },
+                      { label: "Total Capital Exp.",    value: totalCapex > 0 ? `(${fmt(totalCapex)})` : "$0", note: "Vehicle acquisitions", hi: false },
+                      { label: "Total Free Cash Flow",  value: fmt(totalFreeCF),                    note: "Op. CF − CapEx",      hi: true  },
+                      { label: "Year-End Position",     value: fmt(cfRows[11]?.cumulative ?? 0),    note: "Cumulative from M1", hi: (cfRows[11]?.cumulative ?? 0) >= 0 },
+                    ].map((t: any) => (
+                      <div key={t.label} className={`p-3 rounded-lg border ${t.hi ? "bg-primary/5 border-primary/20" : "bg-muted/30 border-border"}`}>
+                        <p className="text-xs text-muted-foreground">{t.label}</p>
+                        <p className={`text-sm font-bold tabular-nums mt-0.5 ${t.hi ? "text-primary" : ""}`}>{t.value}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">{t.note}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Charts side by side */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Monthly Free Cash Flow</p>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <BarChart data={cfChartData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,88%)" />
+                          <XAxis dataKey="month" tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} tickFormatter={fmtK} />
+                          <Tooltip formatter={(v: number) => fmt(v)} />
+                          <Legend wrapperStyle={{ fontSize: 10 }} />
+                          <Bar dataKey="Free CF" fill="hsl(160,50%,42%)" radius={[3,3,0,0]} />
+                          <Bar dataKey="CapEx"   fill="hsl(34,80%,50%)"  radius={[3,3,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Cumulative Cash Position</p>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={cfChartData} margin={{ left: 0, right: 8, top: 4, bottom: 4 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,88%)" />
+                          <XAxis dataKey="month" tick={{ fontSize: 9 }} />
+                          <YAxis tick={{ fontSize: 9 }} tickFormatter={fmtK} />
+                          <Tooltip formatter={(v: number) => fmt(v)} />
+                          <Line dataKey="Cumulative" stroke="hsl(215,60%,40%)" strokeWidth={2.5} dot={{ r: 3 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-x-auto">
+                    <table className="text-xs w-full" data-testid="cash-flow-table">
+                      <thead>
+                        <tr className="bg-muted/80 text-muted-foreground border-b-2 border-border">
+                          <th className={thSticky} style={{ minWidth: 80 }}>Month</th>
+                          <th className="text-center px-3 py-2 whitespace-nowrap font-semibold">Drivers</th>
+                          <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Miles</th>
+                          <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Op. Cash Flow</th>
+                          <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Capital Exp.</th>
+                          <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Free Cash Flow</th>
+                          <th className="text-right px-3 py-2 whitespace-nowrap font-semibold">Cumulative</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {cfRows.map((r, i) => (
+                          <tr key={i} className={`border-b border-border/20 ${
+                            r.capex > 0 ? "bg-amber-500/5" : i % 2 === 0 ? "bg-muted/10" : ""
+                          }`}>
+                            <td className={`sticky left-0 z-10 px-3 py-2 font-bold border-r border-border/30 ${
+                              i % 2 === 0 ? "bg-muted/20" : "bg-background"
+                            }`}>
+                              M{r.month}
+                              {r.capex > 0 && <span className="ml-1 text-[9px] bg-amber-500/20 text-amber-700 px-1 py-0.5 rounded">+TRUCK</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-center tabular-nums">{r.drivers}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{r.miles.toLocaleString()}</td>
+                            <td className={`px-3 py-1.5 text-right tabular-nums font-medium ${
+                              r.operatingCF >= 0 ? "text-chart-3" : "text-destructive"
+                            }`}>{fmt(r.operatingCF)}</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                              {r.capex > 0 ? `(${fmt(r.capex)})` : "—"}
+                            </td>
+                            <td className={`px-3 py-1.5 text-right tabular-nums font-bold ${
+                              r.freeCF >= 0 ? "text-chart-3" : "text-destructive"
+                            }`}>{fmt(r.freeCF)}</td>
+                            <td className={`px-3 py-1.5 text-right tabular-nums font-semibold ${
+                              r.cumulative >= 0 ? "" : "text-destructive"
+                            }`}>{fmt(r.cumulative)}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-muted/40 font-bold border-t-2 border-border">
+                          <td className="sticky left-0 z-10 px-3 py-2 bg-muted/40 border-r border-border/30">TOTAL</td>
+                          <td className="px-3 py-2 text-center text-muted-foreground">—</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">—</td>
+                          <td className={`px-3 py-2 text-right tabular-nums ${
+                            totalOpCF >= 0 ? "text-chart-3" : "text-destructive"
+                          }`}>{fmt(totalOpCF)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                            {totalCapex > 0 ? `(${fmt(totalCapex)})` : "—"}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums ${
+                            totalFreeCF >= 0 ? "text-chart-3" : "text-destructive"
+                          }`}>{fmt(totalFreeCF)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">—</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <p className="text-[10px] text-muted-foreground mt-2 leading-relaxed">
+                    Op. Cash Flow = EBIT (Revenue − Variable − Fuel − Fixed − Lease). CapEx = vehicle down payments
+                    on acquisition months only. Free CF = Op. CF − CapEx. Cumulative starts at $0 from Month 1.
+                  </p>
+                </>
+              );
+            })()}
+          </CardContent>
+        </Card>
       </section>
 
       {/* ── SECTION 2: All 3 Scenarios ── */}

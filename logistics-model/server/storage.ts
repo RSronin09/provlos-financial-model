@@ -25,6 +25,10 @@ import {
 const sqlite = new Database("data.db");
 const db = drizzle(sqlite);
 
+// ── Schema migrations (add columns if they don't exist yet) ──
+try { sqlite.exec(`ALTER TABLE business_settings ADD COLUMN truck_down_payment REAL NOT NULL DEFAULT 5000`); } catch {}
+try { sqlite.exec(`ALTER TABLE business_settings ADD COLUMN monthly_lease_payment REAL NOT NULL DEFAULT 800`); } catch {}
+
 export interface IStorage {
   // Business Settings
   getSettings(): BusinessSettings | undefined;

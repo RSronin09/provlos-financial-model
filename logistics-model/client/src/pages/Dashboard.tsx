@@ -269,30 +269,45 @@ export default function Dashboard() {
                 <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold">Active</span>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div className="p-2.5 bg-muted/40 rounded-lg border border-border text-center">
-                <p className="text-[10px] text-muted-foreground">Active Job Types</p>
-                <p className="text-sm font-bold tabular-nums">{data.revenueModel.totalJobTypes}</p>
-              </div>
-              <div className="p-2.5 bg-muted/40 rounded-lg border border-border text-center">
-                <p className="text-[10px] text-muted-foreground">Total Runs / Mo</p>
-                <p className="text-sm font-bold tabular-nums">{data.revenueModel.totalRuns}</p>
-              </div>
-              <div className="p-2.5 bg-muted/40 rounded-lg border border-border text-center">
-                <p className="text-[10px] text-muted-foreground">Total Miles / Mo</p>
-                <p className="text-sm font-bold tabular-nums">{data.revenueModel.jobTypeTotalMiles?.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground">{data.revenueModel.jobTypeBillableMiles?.toLocaleString()} billable</p>
-              </div>
-              <div className={`p-2.5 rounded-lg border text-center ${
-                data.revenueModel.usingRateModel ? "bg-primary/5 border-primary/20" : "bg-muted/40 border-border"
-              }`}>
-                <p className="text-[10px] text-muted-foreground">Computed Revenue</p>
-                <p className={`text-sm font-bold tabular-nums ${
-                  data.revenueModel.usingRateModel ? "text-primary" : ""
-                }`}>${data.revenueModel.computedMonthlyRevenue?.toLocaleString()}</p>
-                <p className="text-[10px] text-muted-foreground">from job types</p>
-              </div>
-            </div>
+            {/* Per-job-type profitability ranking — surplus/mile is the headline */}
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border/50 text-muted-foreground">
+                  <th className="text-left py-1.5 font-medium">Job Type</th>
+                  <th className="text-right py-1.5 font-medium">Adj. Rate/mi</th>
+                  <th className="text-right py-1.5 font-medium">BEP Floor/mi</th>
+                  <th className="text-right py-1.5 font-medium font-bold text-foreground">Surplus/mi ↑</th>
+                  <th className="text-right py-1.5 font-medium">Revenue/mo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...(data.revenueModel.jobTypeBreakdown ?? [])]
+                  .sort((a: any, b: any) => b.surplusPerMile - a.surplusPerMile)
+                  .map((jt: any) => (
+                    <tr key={jt.id} className="border-b border-border/20 hover:bg-muted/20">
+                      <td className="py-1.5 pr-2">
+                        <span className="font-medium">{jt.name}</span>
+                        {(jt.complexityFactor > 0 || jt.urgencyFactor > 0) && (
+                          <span className="ml-1.5 text-[9px] text-primary bg-primary/10 px-1 py-0.5 rounded">
+                            {jt.complexityFactor > 0 && `+${(jt.complexityFactor * 100).toFixed(0)}% cmplx`}
+                            {jt.complexityFactor > 0 && jt.urgencyFactor > 0 && " "}
+                            {jt.urgencyFactor > 0 && `+${(jt.urgencyFactor * 100).toFixed(0)}% urgnt`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums text-muted-foreground">${jt.totalRatePerMile}/mi</td>
+                      <td className="py-1.5 text-right tabular-nums text-muted-foreground">${jt.bepRatePerMile}/mi</td>
+                      <td className={`py-1.5 text-right tabular-nums font-bold ${
+                        jt.isProfitable ? "text-chart-3" : "text-destructive"
+                      }`}>
+                        {jt.surplusPerMile >= 0 ? "+" : ""}{jt.surplusPerMile}/mi
+                      </td>
+                      <td className="py-1.5 text-right tabular-nums">${jt.monthlyRevenue?.toLocaleString()}</td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
           </CardContent>
         </Card>
       )}

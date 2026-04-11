@@ -213,70 +213,125 @@ export async function registerRoutes(server: Server, app: Express) {
     const allScenarios = storage.getScenarios();
     const { price: gasPrice, source: gasPriceSource } = await fetchGasPrice(settings.state);
 
-    // ── Driver growth timeline ────────────────────────────────────────────
-    const allMilestones = storage.getDriverMilestones()
-      .sort((a, b) => a.startMonth - b.startMonth);
+    // ═════════════════════════════════════════════════════════
+    // MILES-BASED ENGINE
+    // Primary input: settings.totalMilesPerMonth
+    // Driver auto-assignment: 1 driver per 10,000 miles (1-10k=1, 10k-20k=2, ...)
+    // Job types split total miles by jobMixPct (%)
+    // Ramp-up: additional drivers start at 10/25/65/100% capacity by week in Month 1
+    // ═════════════════════════════════════════════════════════
 
-    // Build fleet size for each month 1–12
-    // Start with settings.fleetSize, then apply milestones forward
-    const fleetByMonth: number[] = Array.from({ length: 12 }, (_, i) => {
-      const month = i + 1;
-      let fleet = settings.fleetSize;
-      for (const m of allMilestones) {
-        if (m.startMonth <= month) fleet = m.fleetSize;
-        else break;
-      }
-      return fleet;
+    const startingMiles = settings.totalMilesPerMonth ?? 5000;
+    const milesIncrement = settings.monthlyMilesIncrement ?? 0;
+
+    // Build per-month miles array (Month 1 = starting, each month += increment)
+    const milesByMonth: number[] = Array.from({ length: 12 }, (_, i) =>
+      Math.max(0, startingMiles + milesIncrement * i)
+    );
+
+    // Auto-assign drivers per month based on miles thresholds
+    const MILES_PER_DRIVER = 10000;
+    const driversByMonth: number[] = milesByMonth.map((m) =>
+      Math.max(1, Math.ceil(m / MILES_PER_DRIVER))
+    );
+
+    // Detect threshold crossings (months where driver count increases vs previous month)
+    const rampMonths: Set<number> = new Set();
+    for (let i = 1; i < 12; i++) {
+      if (driversByMonth[i] > driversByMonth[i - 1]) rampMonths.add(i); // 0-indexed
+    }
+    // Month 0 (Month 1) is a ramp if starting fleet > 1
+    if (driversByMonth[0] > 1) rampMonths.add(0);
+
+    // Ramp-up: accelerated curve 10/25/65/100% over 4 weeks
+    const RAMP_WEEKS = [0.10, 0.25, 0.65, 1.00];
+    const RAMP_AVG = RAMP_WEEKS.reduce((s, v) => s + v, 0) / RAMP_WEEKS.length; // 0.50
+
+    // Effective fleet per month (fractional for ramp months)
+    const effectiveFleetByMonth: number[] = driversByMonth.map((drivers, i) => {
+      if (!rampMonths.has(i)) return drivers;
+      const prevDrivers = i === 0 ? 1 : driversByMonth[i - 1];
+      const newDrivers = drivers - prevDrivers;
+      return prevDrivers + newDrivers * RAMP_AVG; // prev at 100%, new at avg 50%
     });
 
-    // ── Multi-job-type revenue engine ─────────────────────────────────────────
-    // Total miles are derived from job types (single source of truth)
+    // Convenience aliases for Month 1 (used downstream for base calculations)
+    const totalMilesPerMonth = milesByMonth[0]; // Month 1 miles
+    const autoDriverCount = driversByMonth[0];  // Month 1 drivers
+    const additionalDrivers = autoDriverCount - 1;
+    const month1EffectiveFleet = effectiveFleetByMonth[0];
+    const fleetByMonth = effectiveFleetByMonth;
+
+    // Fuel: per month based on that month's miles
+    const gallonsPerMonth = totalMilesPerMonth / settings.avgMpg; // Month 1 base
+    const monthlyFuelCost = gallonsPerMonth * gasPrice;
+    const month1FuelCost = (milesByMonth[0] / settings.avgMpg) * gasPrice * (month1EffectiveFleet / autoDriverCount);
+
+    // Active job types
     const activeJobTypes = storage.getJobTypes().filter((j) => j.isActive);
 
-    // Compute per-job-type breakdown
+    // Total mix % (may not be exactly 100 if user hasn't balanced yet)
+    const totalMixPct = activeJobTypes.reduce((s, j) => s + (j.jobMixPct ?? 0), 0);
+    const normFactor = totalMixPct > 0 ? 100 / totalMixPct : 1; // normalize to 100%
+
+    // Per-job-type breakdown (at FULL 1-driver capacity for 1 driver's share of miles)
+    const perDriverTotalMiles = totalMilesPerMonth; // all miles are driven by the fleet
     const jobTypeBreakdown = activeJobTypes.map((jt) => {
-      const totalMiles = jt.avgMilesPerRun * jt.runsPerMonth;
-      const billable = totalMiles * (1 - jt.deadheadPct);
+      const mixPct = (jt.jobMixPct ?? 0) * normFactor; // normalized %
+      const jobMiles = perDriverTotalMiles * (mixPct / 100);
+      const runs = jobMiles > 0 && jt.avgMilesPerRun > 0 ? jobMiles / jt.avgMilesPerRun : 0;
+      const billable = jobMiles * (1 - jt.deadheadPct);
       const rateMultiplier =
         (1 + settings.marginTarget) *
         (1 + settings.marketFactor) *
         (1 + jt.complexityFactor) *
         (1 + jt.urgencyFactor);
-      const computedRate = jt.baseRatePerMile * rateMultiplier;
-      const lineRevenue = (computedRate + jt.fuelSurchargePerMile) * billable + jt.accessorialPerRun * jt.runsPerMonth;
+      // Global base rate from settings applies to ALL job types
+      const globalBaseRate = settings.baseRatePerMile ?? 2.40;
+      const computedRate = globalBaseRate * rateMultiplier;
+      const lineRevenue = (computedRate + jt.fuelSurchargePerMile) * billable + jt.accessorialPerRun * runs;
       return {
         id: jt.id,
         name: jt.name,
-        baseRatePerMile: jt.baseRatePerMile,
+        jobMixPct: Math.round(mixPct * 10) / 10,
+        baseRatePerMile: globalBaseRate,  // global base rate
         computedRatePerMile: Math.round(computedRate * 100) / 100,
         totalRatePerMile: Math.round((computedRate + jt.fuelSurchargePerMile) * 100) / 100,
         avgMilesPerRun: jt.avgMilesPerRun,
-        runsPerDriverPerMonth: jt.runsPerMonth,   // per-driver baseline — scales with fleet
-        runsPerMonth: jt.runsPerMonth,             // keep for backward compat
-        totalMiles,
+        runsPerMonth: Math.round(runs * 10) / 10,        // derived from miles
+        runsPerDriverPerMonth: Math.round(runs * 10) / 10,
+        totalMiles: Math.round(jobMiles),
         billableMiles: Math.round(billable),
-        deadheadMiles: Math.round(totalMiles * jt.deadheadPct),
+        deadheadMiles: Math.round(jobMiles * jt.deadheadPct),
         deadheadPct: jt.deadheadPct,
         complexityFactor: jt.complexityFactor,
         urgencyFactor: jt.urgencyFactor,
         fuelSurchargePerMile: jt.fuelSurchargePerMile,
         accessorialPerRun: jt.accessorialPerRun,
-        monthlyRevenue: Math.round(lineRevenue),       // for 1 driver (base fleet)
-        revenuePerDriver: Math.round(lineRevenue),     // alias — same as monthlyRevenue (1-driver baseline)
+        monthlyRevenue: Math.round(lineRevenue),
+        revenuePerDriver: Math.round(lineRevenue),
       };
     });
 
     const computedMonthlyRevenue = jobTypeBreakdown.reduce((s, j) => s + j.monthlyRevenue, 0);
-    const jobTypeTotalMiles = jobTypeBreakdown.reduce((s, j) => s + j.totalMiles, 0);
+    const jobTypeTotalMiles = totalMilesPerMonth;
     const jobTypeBillableMiles = jobTypeBreakdown.reduce((s, j) => s + j.billableMiles, 0);
 
-    // Total miles derived from job types (single source of truth for the entire model)
-    const totalMilesPerMonth = jobTypeTotalMiles;
-    const gallonsPerMonth = totalMilesPerMonth / settings.avgMpg;
-    const monthlyFuelCost = gallonsPerMonth * gasPrice;
-
-    // Which revenue to use: job-type model vs flat override
+    // Effective revenue: full capacity revenue
     const effectiveRevenue = settings.useRateModel ? computedMonthlyRevenue : settings.monthlyRevenue;
+    // Month 1 effective revenue (ramp-up)
+    const month1Revenue = effectiveRevenue * (month1EffectiveFleet / autoDriverCount);
+
+    // Weekly breakdown for Month 1 ramp-up
+    const month1WeeklyRevenue = RAMP_WEEKS.map((ramp, i) => {
+      // Week capacity = 1 full driver + additional drivers at ramp level
+      const weekFleet = (1 + additionalDrivers * ramp) / autoDriverCount;
+      return Math.round(effectiveRevenue * weekFleet / 4); // /4 for weekly
+    });
+    const month1WeeklyFuel = RAMP_WEEKS.map((ramp) => {
+      const weekFleet = (1 + additionalDrivers * ramp) / autoDriverCount;
+      return Math.round(monthlyFuelCost * weekFleet / 4);
+    });
 
     // Per-job-type BEP will be computed after expenses are known (see below)
 
@@ -285,11 +340,19 @@ export async function registerRoutes(server: Server, app: Express) {
       jobTypeBreakdown,
       computedMonthlyRevenue: Math.round(computedMonthlyRevenue),
       effectiveRevenue: Math.round(effectiveRevenue),
+      month1Revenue: Math.round(month1Revenue),
       usingRateModel: settings.useRateModel,
       marginTarget: settings.marginTarget,
       marketFactor: settings.marketFactor,
-      jobTypeTotalMiles,              // per-driver base miles (Month 1)
+      totalMilesPerMonth,
+      autoDriverCount,
+      additionalDrivers,
+      month1EffectiveFleet: Math.round(month1EffectiveFleet * 100) / 100,
+      rampWeeks: RAMP_WEEKS,
+      month1WeeklyRevenue,
+      jobTypeTotalMiles,              // = totalMilesPerMonth (all miles split by mix%)
       jobTypeBillableMiles,
+      totalMixPct: Math.round(totalMixPct),
       totalJobTypes: activeJobTypes.length,
       totalRuns: jobTypeBreakdown.reduce((s, j) => s + j.runsPerMonth, 0),  // per-driver base runs
       // Per-month fleet-scaled totals (for Monthly P&L rendering)
@@ -301,7 +364,10 @@ export async function registerRoutes(server: Server, app: Express) {
     const fixedExpenses = allExpenses.filter((e) => e.category === "fixed");
     const variableExpenses = allExpenses.filter((e) => e.category === "variable");
 
-    const totalFixed = fixedExpenses.reduce((sum, e) => sum + e.amount, 0);
+    // Month 1 lease only applies to trucks ADDED beyond the 1 already owned
+    const month1AdditionalTrucks = Math.max(0, driversByMonth[0] - 1);
+    const month1Lease = month1AdditionalTrucks * (settings.monthlyLeasePayment ?? 0);
+    const totalFixed = fixedExpenses.reduce((sum, e) => sum + e.amount, 0) + month1Lease;
 
     // For variable expenses: if ratePerMile is set, compute monthly cost = ratePerMile × totalMiles
     // otherwise use the flat amount. Store the computed monthly amount alongside each expense.
@@ -394,8 +460,7 @@ export async function registerRoutes(server: Server, app: Express) {
       ? effectiveRevenue / totalExpenses
       : 0;
 
-    // Scenario projections (12 months) — fleet-aware
-    // Separate fixed costs into scalable (per-vehicle) vs flat overhead
+    // ── Scenario projections (12 months) — miles-based, ramp-up aware ──
     const fixedScalable = fixedExpenses
       .filter((e) => (e as any).scalesWithFleet)
       .reduce((s, e) => s + e.amount, 0);
@@ -403,34 +468,125 @@ export async function registerRoutes(server: Server, app: Express) {
       .filter((e) => !(e as any).scalesWithFleet)
       .reduce((s, e) => s + e.amount, 0);
 
+    // Weekly breakdown data per month (for Monthly tab)
+    const weeklyBreakdownByMonth: any[] = [];
+
     const scenarioProjections = allScenarios.map((scenario) => {
       const months = [];
       for (let m = 1; m <= 12; m++) {
-        const fleet = fleetByMonth[m - 1];           // fleet size this month
+        const idx = m - 1;
+        const monthMiles = milesByMonth[idx];
+        const monthDrivers = driversByMonth[idx];
+        const prevDrivers = idx === 0 ? 1 : driversByMonth[idx - 1];
+        const newDrivers = Math.max(0, monthDrivers - prevDrivers);
+        const isRampMonth = rampMonths.has(idx);
         const monthlyGrowth = Math.pow(1 + settings.revenueGrowthRate / 12, m);
-        // Revenue: each driver runs the full job mix
-        const rev = effectiveRevenue * fleet * scenario.revenueMultiplier * monthlyGrowth;
         const fuelPrice = scenario.fuelPriceOverride || gasPrice;
-        // Fuel scales with fleet (more vehicles = more gallons)
-        const fuel = gallonsPerMonth * fleet * fuelPrice;
-        // Variable costs scale with fleet
-        const varCosts = totalVariable * fleet * scenario.expenseMultiplier;
-        // Fixed scalable (insurance per vehicle) scales with fleet
-        const fixedScaleCosts = fixedScalable * fleet * scenario.expenseMultiplier;
-        // Fixed flat (QuickBooks, PO Box) stays constant
-        const fixedFlatCosts = fixedFlat * scenario.expenseMultiplier;
-        const totalExp = varCosts + fixedScaleCosts + fixedFlatCosts + fuel;
-        months.push({
+        // Per-month fuel based on actual miles that month
+        const monthGallons = monthMiles / settings.avgMpg;
+
+        // ── Vehicle financing — compute FIRST so weekly data can include them ──
+        // First truck already owned; only charge for trucks ADDED beyond the initial 1.
+        const additionalTrucks = idx === 0
+          ? Math.max(0, monthDrivers - 1)
+          : Math.max(0, monthDrivers - driversByMonth[idx - 1]);
+        const leaseThisMonth = Math.round(
+          Math.max(0, monthDrivers - 1) * (settings.monthlyLeasePayment ?? 0) * scenario.expenseMultiplier
+        );
+        const downPaymentThisMonth = Math.round(additionalTrucks * (settings.truckDownPayment ?? 0));
+        // Split evenly across 4 weeks; down payment lands entirely in week 1
+        const leasePerWeek = Math.round(leaseThisMonth / 4);
+
+        let monthRevenue: number;
+        let monthFuel: number;
+        let weeklyData: any[] = [];
+
+        if (isRampMonth) {
+          // Ramp-up: new drivers ramp 10/25/65/100%; existing stay at 100%
+          weeklyData = RAMP_WEEKS.map((ramp, wi) => {
+            const weekDrivers = prevDrivers + newDrivers * ramp;
+            const weekCapacity = weekDrivers / monthDrivers;
+            const wRev = Math.round(effectiveRevenue * (monthMiles / startingMiles) * weekCapacity * scenario.revenueMultiplier * monthlyGrowth / 4);
+            const wFuel = Math.round(monthGallons * weekCapacity * fuelPrice / 4);
+            const wVar = Math.round(totalVariable * (monthMiles / startingMiles) * weekCapacity * scenario.expenseMultiplier / 4);
+            const wFixed = Math.round((fixedScalable * weekDrivers + fixedFlat) * scenario.expenseMultiplier / 4) + leasePerWeek;
+            const wCapex = wi === 0 ? downPaymentThisMonth : 0; // down payment in week 1
+            return {
+              week: wi + 1,
+              miles: Math.round(monthMiles * weekCapacity / 4),
+              driverCapacity: Math.round(weekDrivers * 10) / 10,
+              rampPct: Math.round(weekCapacity * 100),
+              revenue: wRev,
+              fuel: wFuel,
+              variable: wVar,
+              fixed: wFixed,
+              capex: wCapex,
+              expenses: wFuel + wVar + wFixed + wCapex,
+              profit: wRev - (wFuel + wVar + wFixed + wCapex),
+            };
+          });
+          monthRevenue = weeklyData.reduce((s, w) => s + w.revenue, 0);
+          monthFuel = weeklyData.reduce((s, w) => s + w.fuel, 0);
+        } else {
+          // Full capacity — revenue scales with this month’s miles vs Month 1
+          const milsScale = monthMiles / startingMiles;
+          const weekRev = Math.round(effectiveRevenue * milsScale * scenario.revenueMultiplier * monthlyGrowth / 4);
+          const weekFuel = Math.round(monthGallons * fuelPrice / 4);
+          const weekVar = Math.round(totalVariable * milsScale * scenario.expenseMultiplier / 4);
+          const weekFixed = Math.round((fixedScalable * monthDrivers + fixedFlat) * scenario.expenseMultiplier / 4) + leasePerWeek;
+          weeklyData = [1, 2, 3, 4].map((wi) => {
+            const wCapex = wi === 0 ? downPaymentThisMonth : 0;
+            return {
+              week: wi + 1,
+              miles: Math.round(monthMiles / 4),
+              driverCapacity: monthDrivers,
+              rampPct: 100,
+              revenue: weekRev,
+              fuel: weekFuel,
+              variable: weekVar,
+              fixed: weekFixed,
+              capex: wCapex,
+              expenses: weekFuel + weekVar + weekFixed + wCapex,
+              profit: weekRev - (weekFuel + weekVar + weekFixed + wCapex),
+            };
+          });
+          monthRevenue = weeklyData.reduce((s, w) => s + w.revenue, 0);
+          monthFuel = weeklyData.reduce((s, w) => s + w.fuel, 0);
+        }
+
+        const effFleet = effectiveFleetByMonth[idx];
+        const milsScale = monthMiles / startingMiles;
+        const varCosts = Math.round(totalVariable * milsScale * (effFleet / monthDrivers) * scenario.expenseMultiplier);
+        const fixedScaleCosts = Math.round(fixedScalable * effFleet * scenario.expenseMultiplier);
+        const fixedFlatCosts = Math.round(fixedFlat * scenario.expenseMultiplier);
+
+        const operatingExp = varCosts + fixedScaleCosts + fixedFlatCosts + monthFuel + leaseThisMonth;
+        const totalExp = operatingExp + downPaymentThisMonth;
+
+        const monthData = {
           month: m,
-          fleet,
-          revenue: Math.round(rev),
+          miles: Math.round(monthMiles),
+          drivers: monthDrivers,
+          newDrivers,
+          newVehicles: additionalTrucks,
+          isRampMonth,
+          revenue: Math.round(monthRevenue),
           expenses: Math.round(totalExp),
-          profit: Math.round(rev - totalExp),
-          fuelCost: Math.round(fuel),
-        });
+          operatingExpenses: Math.round(operatingExp),
+          leasePayment: leaseThisMonth,
+          downPayment: downPaymentThisMonth,
+          ebit: Math.round(monthRevenue - operatingExp),
+          profit: Math.round(monthRevenue - totalExp),
+          fuelCost: Math.round(monthFuel),
+          weeklyBreakdown: weeklyData,
+        };
+        months.push(monthData);
       }
       return { name: scenario.name, description: scenario.description, months };
     });
+
+    // Store Base Case weekly breakdown for easy access
+    const baseWeekly = scenarioProjections.find((s) => s.name === "Base Case")?.months ?? [];
 
     res.json({
       settings,
@@ -472,9 +628,21 @@ export async function registerRoutes(server: Server, app: Express) {
       },
       revenueModel,
       driverTimeline: {
-        milestones: allMilestones,
-        fleetByMonth,         // array of 12 fleet sizes [M1, M2, ..., M12]
-        baseFleetSize: settings.fleetSize,
+        milestones: [],
+        fleetByMonth,                           // effectiveFleetByMonth[12]
+        driversByMonth,                         // integer drivers per month [12]
+        milesByMonth,                           // actual miles per month [12]
+        rampMonthIndices: Array.from(rampMonths), // 0-indexed months with ramp-up
+        baseFleetSize: autoDriverCount,
+        autoDriverCount,
+        additionalDrivers,
+        totalMilesPerMonth,                     // Month 1 miles (starting)
+        startingMiles,
+        milesIncrement,
+        milesPerDriver: MILES_PER_DRIVER,
+        isRampActive: rampMonths.size > 0,
+        rampWeeks: RAMP_WEEKS,
+        month1EffectiveFleet,
       },
       scenarioProjections,
       annualProjection: {

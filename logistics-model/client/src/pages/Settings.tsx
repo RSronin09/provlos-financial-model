@@ -11,6 +11,73 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Save, Plus, Trash2, Pencil, Check, X, TrendingUp, Info, Truck } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+// ── SpinInput ── number input with manual typing, scroll wheel, and +/− buttons
+function SpinInput({
+  value, onChange, step = 1, min, max, prefix, suffix, className = "", testId,
+}: {
+  value: number; onChange: (v: number) => void;
+  step?: number; min?: number; max?: number;
+  prefix?: string; suffix?: string;
+  className?: string; testId?: string;
+}) {
+  const [raw, setRaw] = React.useState(String(value));
+  React.useEffect(() => { setRaw(String(value)); }, [value]);
+
+  const clamp = (v: number) => {
+    if (min !== undefined) v = Math.max(min, v);
+    if (max !== undefined) v = Math.min(max, v);
+    return v;
+  };
+
+  const commit = (raw: string) => {
+    const n = parseFloat(raw);
+    if (!isNaN(n)) { const c = clamp(n); onChange(c); setRaw(String(c)); }
+    else setRaw(String(value));
+  };
+
+  const nudge = (dir: 1 | -1) => {
+    const next = clamp(parseFloat(raw || '0') + dir * step);
+    onChange(next);
+    setRaw(String(next));
+  };
+
+  return (
+    <div className={`flex items-center rounded-md border border-input bg-background overflow-hidden ${className}`}>
+      {prefix && <span className="pl-2.5 text-xs text-muted-foreground select-none">{prefix}</span>}
+      <input
+        type="number"
+        className="flex-1 min-w-0 px-2 py-1.5 text-sm bg-transparent outline-none tabular-nums
+          [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        value={raw}
+        data-testid={testId}
+        onChange={(e) => setRaw(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit(raw);
+          if (e.key === 'ArrowUp') { e.preventDefault(); nudge(1); }
+          if (e.key === 'ArrowDown') { e.preventDefault(); nudge(-1); }
+        }}
+        onWheel={(e) => { e.preventDefault(); nudge(e.deltaY < 0 ? 1 : -1); }}
+      />
+      {suffix && <span className="pr-1 text-xs text-muted-foreground select-none">{suffix}</span>}
+      <div className="flex flex-col border-l border-border">
+        <button
+          type="button"
+          onClick={() => nudge(1)}
+          className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 text-[10px] leading-none"
+          tabIndex={-1}
+        >▲</button>
+        <button
+          type="button"
+          onClick={() => nudge(-1)}
+          className="px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/50 text-[10px] leading-none border-t border-border"
+          tabIndex={-1}
+        >▼</button>
+      </div>
+    </div>
+  );
+}
+
 // ── InfoTip ── hover tooltip for any input label
 function InfoTip({ content }: { content: string }) {
   return (
@@ -40,6 +107,8 @@ function FieldLabel({ children, tip, size = "sm" }: { children: React.ReactNode;
 // ────────────────────────────────────────────────────────────
 const TIPS = {
   // Business & Fleet
+  truckDownPayment: "One-time cost per vehicle when a new driver/truck joins the fleet. Applied in Month 1 for the initial fleet, and again whenever headcount increases. Includes down payment or initial acquisition cost. Cargo van typical range: $2,000–$10,000 depending on lease structure.",
+  monthlyLeasePayment: "Recurring monthly lease or financing payment per vehicle. Increases automatically when the driver count grows. Does not include fuel, insurance, or maintenance — those are tracked separately. Cargo van typical range: $500–$1,200/month.",
   businessName: "Your legal business name. Appears on all reports and financing documents presented to lenders and investors.",
   state: "Your primary operating state. Used to pull live, state-specific regular gasoline prices from AAA. Fuel is calculated as a direct variable cost in the model.",
   fleetSize: "Number of active vehicles/drivers in Month 1 (your starting fleet). Additional drivers are managed via the Fleet Growth Timeline — costs and revenue scale automatically when milestones are added.",
@@ -59,7 +128,8 @@ const TIPS = {
   // Job Type fields
   jtBaseRate: "Starting rate per mile before any adjustments. Industry benchmarks (2025): Dry van spot $1.80–2.50/mi | Contract freight $2.20–3.00/mi | Specialized/expedited $3.00–5.00+/mi.",
   jtMilesPerRun: "Average one-way miles per delivery for this job type. Multiplied by Runs/Month to get this job type's total monthly miles, which drives fuel cost and per-mile variable expenses.",
-  jtRunsPerMonth: "Runs per driver per month — this is the Month 1 baseline for ONE driver. When you add drivers via the Fleet Growth Timeline, runs automatically multiply: 2 drivers = 2× runs, 3 drivers = 3× runs. This field is locked once fleet milestones are defined to prevent accidental overrides of the auto-scaling.",
+  jtRunsPerMonth: "Derived automatically from Total Miles × Job Mix % ÷ Avg Miles per Run. You no longer enter runs directly — set your total miles and job mix % instead.",
+  jtJobMixPct: "This job type's share of total monthly miles as a percentage. All job types must sum to 100%. Example: FedEx = 20%, E-Commerce = 25%, Platform Parcel = 45%, etc. The model allocates miles proportionally and derives runs, revenue, and costs for each job type.",
   jtComplexity: "Additional rate premium for load difficulty. Standard freight: 0% | Heavy/overweight: +10–25% | Oversized/specialized equipment: +20–50% | Fragile or high-liability cargo: +5–15% | Multi-stop loads: +5–20%.",
   jtUrgency: "Rate premium for time-sensitive deliveries. Standard freight: 0% | Tight delivery window: +10–30% | Same-day / hotshot: +30–100%. Only apply if this job type is regularly expedited.",
   jtDeadhead: "Percentage of total miles driven empty (unpaid return trips). Industry standard: 10–20% of total miles. Deadhead effectively raises your real cost per mile since you pay fuel but earn no revenue on those miles.",
@@ -191,7 +261,8 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
   const [editData, setEditData] = useState<any>({});
   const [showAdd, setShowAdd] = useState(false);
   const [newJT, setNewJT] = useState({
-    name: "", baseRatePerMile: "2.40", avgMilesPerRun: "200", runsPerMonth: "4",
+    name: "", avgMilesPerRun: "200",
+    jobMixPct: "20",
     complexityFactor: "0", urgencyFactor: "0", deadheadPct: "15",
     fuelSurchargePerMile: "0.45", accessorialPerRun: "0",
   });
@@ -202,7 +273,7 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
       queryClient.invalidateQueries({ queryKey: ["/api/job-types"] });
       queryClient.invalidateQueries({ queryKey: ["/api/financial-summary"] });
       setShowAdd(false);
-      setNewJT({ name: "", baseRatePerMile: "2.40", avgMilesPerRun: "200", runsPerMonth: "4", complexityFactor: "0", urgencyFactor: "0", deadheadPct: "15", fuelSurchargePerMile: "0.45", accessorialPerRun: "0" });
+      setNewJT({ name: "", avgMilesPerRun: "200", jobMixPct: "20", complexityFactor: "0", urgencyFactor: "0", deadheadPct: "15", fuelSurchargePerMile: "0.45", accessorialPerRun: "0" });
       toast({ title: "Job type added" });
     },
   });
@@ -233,9 +304,8 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
     setEditId(jt.id);
     setEditData({
       name: jt.name,
-      baseRatePerMile: String(jt.baseRatePerMile),
       avgMilesPerRun: String(jt.avgMilesPerRun),
-      runsPerMonth: String(jt.runsPerMonth),
+      jobMixPct: String(jt.jobMixPct ?? 20),
       complexityFactor: String((jt.complexityFactor * 100).toFixed(0)),
       urgencyFactor: String((jt.urgencyFactor * 100).toFixed(0)),
       deadheadPct: String((jt.deadheadPct * 100).toFixed(0)),
@@ -250,9 +320,9 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
       id: editId,
       data: {
         name: editData.name,
-        baseRatePerMile: parseFloat(editData.baseRatePerMile) || 0,
         avgMilesPerRun: parseFloat(editData.avgMilesPerRun) || 0,
-        runsPerMonth: parseInt(editData.runsPerMonth) || 0,
+        runsPerMonth: 0,
+        jobMixPct: parseFloat(editData.jobMixPct) || 0,
         complexityFactor: (parseFloat(editData.complexityFactor) || 0) / 100,
         urgencyFactor: (parseFloat(editData.urgencyFactor) || 0) / 100,
         deadheadPct: (parseFloat(editData.deadheadPct) || 0) / 100,
@@ -266,9 +336,9 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
     if (!newJT.name) return;
     addMut.mutate({
       name: newJT.name,
-      baseRatePerMile: parseFloat(newJT.baseRatePerMile) || 2.40,
       avgMilesPerRun: parseFloat(newJT.avgMilesPerRun) || 200,
-      runsPerMonth: parseInt(newJT.runsPerMonth) || 4,
+      runsPerMonth: 0, // derived from miles
+      jobMixPct: parseFloat(newJT.jobMixPct) || 20,
       complexityFactor: (parseFloat(newJT.complexityFactor) || 0) / 100,
       urgencyFactor: (parseFloat(newJT.urgencyFactor) || 0) / 100,
       deadheadPct: (parseFloat(newJT.deadheadPct) || 0) / 100,
@@ -278,20 +348,28 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
     });
   };
 
-  // Field row helper
-  const Field = ({ label, value, onChange, suffix, width, step, tip }: any) => (
-    <div className={`space-y-0.5 ${width ?? "w-24"}`}>
-      <Label className="text-[10px] text-muted-foreground flex items-center">
-        {label}{tip && <InfoTip content={tip} />}
-      </Label>
-      <div className="relative">
-        {suffix === "$" && <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">$</span>}
-        <Input type="number" step={step ?? "0.01"} className={`h-7 text-xs ${suffix === "$" ? "pl-5" : ""} ${suffix === "%" ? "pr-5" : ""}`}
-          value={value} onChange={(e: any) => onChange(e.target.value)} />
-        {suffix === "%" && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">%</span>}
+  // Field row helper — uses SpinInput for scroll + +/- support
+  const Field = ({ label, value, onChange, suffix, width, step, tip }: any) => {
+    const numVal = parseFloat(value) || 0;
+    const stepNum = parseFloat(step) || (suffix === "%" ? 1 : 0.01);
+    return (
+      <div className={`space-y-0.5 ${width ?? "w-24"}`}>
+        <Label className="text-[10px] text-muted-foreground flex items-center">
+          {label}{tip && <InfoTip content={tip} />}
+        </Label>
+        <SpinInput
+          value={numVal}
+          onChange={(v) => onChange(String(v))}
+          step={stepNum}
+          min={suffix === "%" ? -100 : 0}
+          max={suffix === "%" ? 200 : undefined}
+          prefix={suffix === "$" ? "$" : undefined}
+          suffix={suffix === "%" ? "%" : undefined}
+          className="h-7 text-xs"
+        />
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <Card data-testid="card-job-types">
@@ -348,20 +426,24 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
       </CardHeader>
 
       <CardContent className="space-y-3">
-        {/* Auto-scale notice when milestones are active */}
-        {hasMilestones && (
-          <div className="p-3 bg-primary/5 border border-primary/20 rounded-lg flex items-start gap-2">
-            <Info className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
-            <div className="text-xs">
-              <p className="font-semibold text-primary">Runs auto-scale with fleet</p>
-              <p className="text-muted-foreground mt-0.5">
-                <strong>Runs/Driver/Mo</strong> is your Month 1 baseline per driver.
-                When a fleet milestone fires (e.g. 2 drivers at M6), runs double automatically.
-                The field is locked 🔒 to protect this scaling — remove all milestones to edit it.
-              </p>
+        {/* Job mix total indicator */}
+        {(() => {
+          const totalMix = jobTypesList.reduce((s: number, jt: any) => s + (jt.jobMixPct ?? 0), 0);
+          const isBalanced = Math.abs(totalMix - 100) < 0.5;
+          return (
+            <div className={`p-2.5 rounded-lg flex items-center justify-between text-xs ${
+              isBalanced ? "bg-chart-3/5 border border-chart-3/30" : "bg-amber-500/5 border border-amber-500/30"
+            }`}>
+              <span className="font-medium">
+                Job Mix Total: <strong>{Math.round(totalMix)}%</strong>
+                {!isBalanced && " — must equal 100%"}
+              </span>
+              <span className={`font-bold ${isBalanced ? "text-chart-3" : "text-amber-600"}`}>
+                {isBalanced ? "✓ Balanced" : `${totalMix > 100 ? "+" : "-"}${Math.abs(totalMix - 100).toFixed(0)}% off`}
+              </span>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Job Type List */}
         {jobTypesList.map((jt: any) => {
@@ -382,15 +464,8 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
                   </Button>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Field label="Base Rate ($/mi)" tip={TIPS.jtBaseRate} value={editData.baseRatePerMile} onChange={(v: string) => setEditData({ ...editData, baseRatePerMile: v })} suffix="$" />
+                  <Field label="Job Mix %" tip={TIPS.jtJobMixPct} value={editData.jobMixPct} onChange={(v: string) => setEditData({ ...editData, jobMixPct: v })} suffix="%" />
                   <Field label="Miles/Run" tip={TIPS.jtMilesPerRun} value={editData.avgMilesPerRun} onChange={(v: string) => setEditData({ ...editData, avgMilesPerRun: v })} step="10" />
-                  <Field
-                    label={hasMilestones ? "Runs/Driver/Mo 🔒" : "Runs/Driver/Mo"}
-                    tip={TIPS.jtRunsPerMonth}
-                    value={editData.runsPerMonth}
-                    onChange={(v: string) => !hasMilestones && setEditData({ ...editData, runsPerMonth: v })}
-                    step="1"
-                  />
                   <Field label="Complexity %" tip={TIPS.jtComplexity} value={editData.complexityFactor} onChange={(v: string) => setEditData({ ...editData, complexityFactor: v })} suffix="%" />
                   <Field label="Urgency %" tip={TIPS.jtUrgency} value={editData.urgencyFactor} onChange={(v: string) => setEditData({ ...editData, urgencyFactor: v })} suffix="%" />
                   <Field label="Deadhead %" tip={TIPS.jtDeadhead} value={editData.deadheadPct} onChange={(v: string) => setEditData({ ...editData, deadheadPct: v })} suffix="%" />
@@ -405,16 +480,32 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
             <div key={jt.id} className="p-3 border border-border rounded-lg hover:border-primary/30 transition-colors group" data-testid={`jt-row-${jt.id}`}>
               <div className="flex items-start justify-between mb-2">
                 <div>
-                  <p className="text-sm font-semibold">{jt.name}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    ${jt.baseRatePerMile}/mi base · {jt.avgMilesPerRun} mi/run ·{" "}
-                    <span className={hasMilestones ? "text-primary font-semibold" : ""}>
-                      {jt.runsPerMonth} run{jt.runsPerMonth !== 1 ? "s" : ""}/driver/mo
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold">{jt.name}</p>
+                    <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+                      {jt.jobMixPct ?? 0}% of miles
                     </span>
-                    {hasMilestones && ` 🔒`}
-                    {jt.complexityFactor > 0 && ` · +${(jt.complexityFactor * 100).toFixed(0)}% complexity`}
-                    {jt.urgencyFactor > 0 && ` · +${(jt.urgencyFactor * 100).toFixed(0)}% urgency`}
-                  </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                    <span className="text-[10px] text-muted-foreground">{jt.avgMilesPerRun} mi/run</span>
+                    {bd && (() => {
+                      const runsM1 = Math.round(bd.runsPerMonth);
+                      const inc = form.monthlyMilesIncrement ?? 0;
+                      const runsM12 = inc > 0
+                        ? Math.round(((form.totalMilesPerMonth + 11 * inc) * ((jt.jobMixPct ?? 0) / 100)) / (jt.avgMilesPerRun || 1))
+                        : null;
+                      return (
+                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded flex items-center gap-1">
+                          ~{runsM1} runs/mo
+                          {runsM12 !== null && runsM12 !== runsM1 && (
+                            <span className="text-chart-3">→ ~{runsM12} by Mo.12</span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                    {jt.complexityFactor > 0 && <span className="text-[9px] text-amber-600 bg-amber-500/10 px-1.5 py-0.5 rounded">+{(jt.complexityFactor * 100).toFixed(0)}% complexity</span>}
+                    {jt.urgencyFactor > 0 && <span className="text-[9px] text-blue-600 bg-blue-500/10 px-1.5 py-0.5 rounded">+{(jt.urgencyFactor * 100).toFixed(0)}% urgency</span>}
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-primary" onClick={() => startEdit(jt)}>
@@ -426,26 +517,69 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
                 </div>
               </div>
               {bd && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  <div className="p-1.5 bg-muted/30 rounded text-center">
-                    <p className="text-[9px] text-muted-foreground">Total Rate/mi</p>
-                    <p className="text-xs font-bold tabular-nums">${bd.totalRatePerMile}/mi</p>
+                <div className="space-y-1.5">
+                  {/* Hero: Surplus above BEP — this is what complexity/urgency actually drives */}
+                  <div className={`p-2 rounded-lg border flex items-center justify-between ${
+                    bd.isProfitable
+                      ? "bg-chart-3/5 border-chart-3/30"
+                      : "bg-destructive/5 border-destructive/30"
+                  }`}>
+                    <div>
+                      <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Profitability vs BEP
+                      </p>
+                      <div className="flex items-baseline gap-2 mt-0.5">
+                        <span className={`text-sm font-bold tabular-nums ${
+                          bd.isProfitable ? "text-chart-3" : "text-destructive"
+                        }`}>
+                          {bd.surplusPerMile >= 0 ? "+" : ""}{bd.surplusPerMile}/mi above BEP
+                        </span>
+                        {(bd.complexityFactor > 0 || bd.urgencyFactor > 0) && (
+                          <span className="text-[9px] text-muted-foreground">
+                            (includes
+                            {bd.complexityFactor > 0 && ` +${(bd.complexityFactor * 100).toFixed(0)}% complexity`}
+                            {bd.urgencyFactor > 0 && ` +${(bd.urgencyFactor * 100).toFixed(0)}% urgency`}
+                            )
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      bd.isProfitable
+                        ? "bg-chart-3/10 text-chart-3"
+                        : "bg-destructive/10 text-destructive"
+                    }`}>
+                      {bd.isProfitable ? "PROFITABLE" : "BELOW BEP"}
+                    </span>
                   </div>
-                  <div className="p-1.5 bg-muted/30 rounded text-center">
-                    <p className="text-[9px] text-muted-foreground">Revenue/mo</p>
-                    <p className="text-xs font-bold tabular-nums">${bd.monthlyRevenue?.toLocaleString()}</p>
-                  </div>
-                  <div className="p-1.5 bg-muted/30 rounded text-center">
-                    <p className="text-[9px] text-muted-foreground">BEP Rate/mi</p>
-                    <p className={`text-xs font-bold tabular-nums ${bd.isProfitable ? "text-chart-3" : "text-destructive"}`}>
-                      ${bd.bepRatePerMile}/mi
-                    </p>
-                  </div>
-                  <div className="p-1.5 bg-muted/30 rounded text-center">
-                    <p className="text-[9px] text-muted-foreground">Surplus/mi</p>
-                    <p className={`text-xs font-bold tabular-nums ${bd.isProfitable ? "text-chart-3" : "text-destructive"}`}>
-                      {bd.surplusPerMile >= 0 ? "+" : ""}${bd.surplusPerMile}/mi
-                    </p>
+
+                  {/* Supporting details */}
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <div className="p-1.5 bg-muted/30 rounded text-center">
+                      <p className="text-[9px] text-muted-foreground">Adjusted Rate/mi</p>
+                      <p className="text-xs font-bold tabular-nums">${bd.totalRatePerMile}/mi</p>
+                      <p className="text-[8px] text-muted-foreground">incl. all premiums</p>
+                    </div>
+                    <div className="p-1.5 bg-muted/30 rounded text-center">
+                      <p className="text-[9px] text-muted-foreground">BEP Floor/mi</p>
+                      <p className="text-xs font-bold tabular-nums text-muted-foreground">${bd.bepRatePerMile}/mi</p>
+                      <p className="text-[8px] text-muted-foreground">min to cover costs</p>
+                    </div>
+                    <div className="p-1.5 bg-muted/30 rounded text-center">
+                      <p className="text-[9px] text-muted-foreground">Runs/Month</p>
+                      <p className="text-xs font-bold tabular-nums">{Math.round(bd.runsPerMonth)}</p>
+                      {(() => {
+                        const inc = form.monthlyMilesIncrement ?? 0;
+                        if (inc <= 0) return <p className="text-[8px] text-muted-foreground">Mo.1 · flat</p>;
+                        const runsM12 = Math.round(((form.totalMilesPerMonth + 11 * inc) * ((jt.jobMixPct ?? 0) / 100)) / (jt.avgMilesPerRun || 1));
+                        return <p className="text-[8px] text-chart-3 font-medium">→ ~{runsM12} by Mo.12</p>;
+                      })()}
+                    </div>
+                    <div className="p-1.5 bg-muted/30 rounded text-center">
+                      <p className="text-[9px] text-muted-foreground">Allocated Cost</p>
+                      <p className="text-xs font-bold tabular-nums">${bd.allocatedFixed !== undefined ? (bd.allocatedFixed + bd.ownVariableCosts).toLocaleString() : "—"}</p>
+                      <p className="text-[8px] text-muted-foreground">this job's share</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -462,15 +596,8 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
                 onChange={(e) => setNewJT({ ...newJT, name: e.target.value })} data-testid="input-new-jt-name" />
             </div>
             <div className="flex flex-wrap gap-2">
-              <Field label="Base Rate ($/mi)" tip={TIPS.jtBaseRate} value={newJT.baseRatePerMile} onChange={(v: string) => setNewJT({ ...newJT, baseRatePerMile: v })} suffix="$" />
+              <Field label="Job Mix %" tip={TIPS.jtJobMixPct} value={newJT.jobMixPct} onChange={(v: string) => setNewJT({ ...newJT, jobMixPct: v })} suffix="%" />
               <Field label="Miles/Run" tip={TIPS.jtMilesPerRun} value={newJT.avgMilesPerRun} onChange={(v: string) => setNewJT({ ...newJT, avgMilesPerRun: v })} step="10" />
-              <Field
-                label="Runs/Driver/Mo"
-                tip={TIPS.jtRunsPerMonth}
-                value={newJT.runsPerMonth}
-                onChange={(v: string) => setNewJT({ ...newJT, runsPerMonth: v })}
-                step="1"
-              />
               <Field label="Complexity %" tip={TIPS.jtComplexity} value={newJT.complexityFactor} onChange={(v: string) => setNewJT({ ...newJT, complexityFactor: v })} suffix="%" />
               <Field label="Urgency %" tip={TIPS.jtUrgency} value={newJT.urgencyFactor} onChange={(v: string) => setNewJT({ ...newJT, urgencyFactor: v })} suffix="%" />
               <Field label="Deadhead %" tip={TIPS.jtDeadhead} value={newJT.deadheadPct} onChange={(v: string) => setNewJT({ ...newJT, deadheadPct: v })} suffix="%" />
@@ -758,7 +885,9 @@ export default function Settings() {
 
   const [form, setForm] = useState<any>({
     businessName: "", state: "FL", fleetSize: 1,
-    avgMpg: 12, monthlyRevenue: 15000, revenueGrowthRate: 0.024,
+    totalMilesPerMonth: 5000,
+    monthlyMilesIncrement: 0,
+    avgMpg: 20, monthlyRevenue: 15000, revenueGrowthRate: 0.024,
     useOfProceeds: "",
     // Revenue model defaults
     useRateModel: false,
@@ -916,12 +1045,134 @@ export default function Settings() {
                 onChange={(e) => setF("fleetSize", parseInt(e.target.value) || 0)}
                 data-testid="input-fleet-size" />
             </div>
-            {/* Avg Miles per Truck removed — miles now derived from Job Types */}
+            <div className="space-y-1.5 col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <FieldLabel tip="Month 1 starting miles. The model adds your monthly increment each month. Driver count auto-assigns: 1–10k=1 driver, 10k–20k=2 drivers, 20k–30k=3 drivers. etc.">
+                    Starting Miles / Month (M1)
+                  </FieldLabel>
+                  <SpinInput
+                    value={form.totalMilesPerMonth ?? 5000}
+                    onChange={(v) => setF("totalMilesPerMonth", v)}
+                    step={500} min={0} suffix="mi"
+                    testId="input-total-miles"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <FieldLabel tip="Miles added each month on top of the starting miles. Set to 0 for a flat model. Example: start 6,000 + 1,000/mo = 6k, 7k, 8k … When miles cross 10k, 20k, 30k etc. a new driver is auto-assigned that month with ramp-up.">
+                    Monthly Miles Increase (+/mo)
+                  </FieldLabel>
+                  <SpinInput
+                    value={form.monthlyMilesIncrement ?? 0}
+                    onChange={(v) => setF("monthlyMilesIncrement", v)}
+                    step={100} min={0} suffix="mi/mo"
+                    testId="input-miles-increment"
+                  />
+                </div>
+              </div>
+
+              {/* 12-month miles + driver preview */}
+              {(() => {
+                const start = form.totalMilesPerMonth ?? 5000;
+                const inc = form.monthlyMilesIncrement ?? 0;
+                const months = Array.from({ length: 12 }, (_, i) => ({
+                  m: i + 1,
+                  miles: Math.max(0, start + inc * i),
+                  drivers: Math.max(1, Math.ceil(Math.max(0, start + inc * i) / 10000)),
+                }));
+                const maxMiles = Math.max(...months.map(m => m.miles), 1);
+                const driverChanges = months.filter((m, i) =>
+                  i === 0 ? m.drivers > 1 : m.drivers > months[i-1].drivers
+                );
+                return (
+                  <div className="mt-2 p-3 bg-muted/20 rounded-lg border border-border">
+                    <p className="text-xs font-semibold text-muted-foreground mb-2">12-Month Miles &amp; Driver Projection</p>
+                    <div className="flex gap-1 items-end h-16 mb-1">
+                      {months.map((m, i) => {
+                        const isDriverChange = i === 0 ? m.drivers > 1 : m.drivers > months[i-1].drivers;
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                            <span className="text-[8px] font-bold text-muted-foreground">
+                              {m.drivers > 1 ? m.drivers + 'd' : ''}
+                            </span>
+                            <div
+                              title={`M${m.m}: ${m.miles.toLocaleString()} mi, ${m.drivers} driver${m.drivers !== 1 ? 's' : ''}`}
+                              className={`w-full rounded-t transition-all ${
+                                isDriverChange ? 'bg-primary' :
+                                m.drivers > 1 ? 'bg-primary/60' : 'bg-primary/30'
+                              }`}
+                              style={{ height: `${(m.miles / maxMiles) * 48 + 4}px` }}
+                            />
+                            <span className="text-[8px] text-muted-foreground">M{m.m}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="flex justify-between text-[10px] text-muted-foreground">
+                      <span>M1: {start.toLocaleString()} mi</span>
+                      {inc !== 0 && <span>+{inc.toLocaleString()}/mo</span>}
+                      <span>M12: {months[11].miles.toLocaleString()} mi</span>
+                    </div>
+                    {driverChanges.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {driverChanges.map((m, i) => (
+                          <span key={i} className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold">
+                            M{m.m}: → {m.drivers} drivers (⇑ RAMP)
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel tip="Global base rate per mile applied to ALL job types. Job type adjustments (complexity %, urgency %, fuel surcharge) are added on top of this rate. Industry benchmarks: dry van $1.80–2.50/mi, contract $2.20–3.00/mi.">
+                Base Rate / Mile ($)
+              </FieldLabel>
+              <SpinInput
+                value={form.baseRatePerMile ?? 2.40}
+                onChange={(v) => setF("baseRatePerMile", v)}
+                step={0.05}
+                min={0.01}
+                prefix="$"
+                suffix="/mi"
+                testId="input-base-rate"
+              />
+            </div>
             <div className="space-y-1.5">
               <FieldLabel tip={TIPS.avgMpg}>Avg MPG</FieldLabel>
-              <Input type="number" step="0.1" value={form.avgMpg}
-                onChange={(e) => setF("avgMpg", parseFloat(e.target.value) || 0)}
-                data-testid="input-mpg" />
+              <SpinInput
+                value={form.avgMpg ?? 20}
+                onChange={(v) => setF("avgMpg", v)}
+                step={0.5}
+                min={1}
+                suffix="mpg"
+                testId="input-mpg"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel tip={TIPS.truckDownPayment}>Avg Truck Down Payment ($)</FieldLabel>
+              <SpinInput
+                value={form.truckDownPayment ?? 5000}
+                onChange={(v) => setF("truckDownPayment", v)}
+                step={500}
+                min={0}
+                prefix="$"
+                testId="input-truck-down-payment"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel tip={TIPS.monthlyLeasePayment}>Monthly Lease / Payment ($)</FieldLabel>
+              <SpinInput
+                value={form.monthlyLeasePayment ?? 800}
+                onChange={(v) => setF("monthlyLeasePayment", v)}
+                step={50}
+                min={0}
+                prefix="$"
+                suffix="/mo per truck"
+                testId="input-monthly-lease"
+              />
             </div>
             <div className="space-y-1.5">
               <FieldLabel tip={TIPS.revenueGrowthRate}>Revenue Growth Rate (%/year)</FieldLabel>
@@ -947,8 +1198,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* ── Fleet Growth Timeline ── */}
-      <DriverTimelineSection baseFleetSize={form.fleetSize ?? 1} />
+      {/* Fleet Growth Timeline removed — drivers now auto-assigned from Total Miles */}
 
       {/* ── Job Types & Revenue Model ── */}
       <JobTypesSectionWithMilestoneCheck

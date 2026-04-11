@@ -7,8 +7,10 @@ export const businessSettings = sqliteTable("business_settings", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   businessName: text("business_name").notNull().default("My Logistics Co"),
   state: text("state").notNull().default("FL"),
-  fleetSize: integer("fleet_size").notNull().default(3),
-  avgMpg: real("avg_mpg").notNull().default(12), // miles per gallon — still needed for fuel cost calc
+  fleetSize: integer("fleet_size").notNull().default(1), // auto-computed from totalMilesPerMonth; kept for fallback
+  totalMilesPerMonth: real("total_miles_per_month").notNull().default(5000), // Month 1 starting miles
+  monthlyMilesIncrement: real("monthly_miles_increment").notNull().default(0), // miles added each month (0 = flat)
+  avgMpg: real("avg_mpg").notNull().default(20), // miles per gallon — still needed for fuel cost calc
   monthlyRevenue: real("monthly_revenue").notNull().default(50000),
   revenueGrowthRate: real("revenue_growth_rate").notNull().default(0.05), // 5% per year
   useOfProceeds: text("use_of_proceeds").default(""), // freeform financing narrative
@@ -25,6 +27,10 @@ export const businessSettings = sqliteTable("business_settings", {
   deadheadPct: real("deadhead_pct").notNull().default(0.15),                  // 15% unpaid miles
   fuelSurchargePerMile: real("fuel_surcharge_per_mile").notNull().default(0.45), // $/mile
   accessorialPerMonth: real("accessorial_per_month").notNull().default(0.0),  // detention/layover/$
+
+  // ── Vehicle Financing ─────────────────────────────────────────────────────
+  truckDownPayment: real("truck_down_payment").notNull().default(5000),       // one-time per vehicle when acquired
+  monthlyLeasePayment: real("monthly_lease_payment").notNull().default(800),  // recurring per vehicle/month
 });
 
 export const insertBusinessSettingsSchema = createInsertSchema(businessSettings).omit({ id: true });
@@ -79,7 +85,8 @@ export const jobTypes = sqliteTable("job_types", {
   name: text("name").notNull(),                                      // e.g. "Standard Dry Van", "Heavy Load"
   baseRatePerMile: real("base_rate_per_mile").notNull().default(2.40), // $/mile starting rate
   avgMilesPerRun: real("avg_miles_per_run").notNull().default(200),    // miles per delivery
-  runsPerMonth: integer("runs_per_month").notNull().default(4),        // how many of these per month
+  runsPerMonth: integer("runs_per_month").notNull().default(4),        // DERIVED: totalMiles × mixPct ÷ avgMilesPerRun (kept for legacy)
+  jobMixPct: real("job_mix_pct").notNull().default(20),                // % share of total miles (all types must sum to 100)
   complexityFactor: real("complexity_factor").notNull().default(0.0),  // +X% for heavy/oversized/fragile
   urgencyFactor: real("urgency_factor").notNull().default(0.0),        // +X% for expedited/hotshot
   deadheadPct: real("deadhead_pct").notNull().default(0.15),           // % of miles empty/unpaid
