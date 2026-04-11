@@ -241,6 +241,7 @@ export async function registerRoutes(server: Server, app: Express) {
       fuelType: "Regular Gasoline",
       source,
       lastUpdated: new Date().toISOString(),
+      eiaKeyPresent: !!process.env.EIA_API_KEY,
     });
   });
 
