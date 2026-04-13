@@ -51,7 +51,7 @@ export default function Dashboard() {
   if (isLoading || !data) {
     return (
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-24 rounded-lg" />
           ))}
@@ -107,7 +107,7 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4" data-testid="kpi-grid">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="kpi-grid">
         <KPICard
           title="Monthly Revenue"
           value={`$${profitability.monthlyRevenue.toLocaleString()}`}
@@ -270,7 +270,8 @@ export default function Dashboard() {
               )}
             </div>
             {/* Per-job-type profitability ranking — surplus/mile is the headline */}
-            <table className="w-full text-xs">
+            <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-xs min-w-[420px]">
               <thead>
                 <tr className="border-b border-border/50 text-muted-foreground">
                   <th className="text-left py-1.5 font-medium">Job Type</th>
@@ -308,6 +309,7 @@ export default function Dashboard() {
                 }
               </tbody>
             </table>
+            </div>
           </CardContent>
         </Card>
       )}

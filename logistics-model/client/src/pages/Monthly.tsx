@@ -700,7 +700,7 @@ export default function Monthly() {
                   <p className="text-[11px] text-muted-foreground">(Fixed + Variable) ÷ Total Miles — min rate/mile to cover ALL costs</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                 {/* PRIMARY: BEP rate/mile */}
                 <div className="p-2.5 bg-primary/5 rounded-lg border border-primary/20 col-span-2">
                   <p className="text-xs text-muted-foreground">BEP Rate / Mile</p>

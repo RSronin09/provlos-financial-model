@@ -557,7 +557,7 @@ function JobTypesSection({ form, setF, settingsMutation, hasMilestones }: { form
                   </div>
 
                   {/* Supporting details */}
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     <div className="p-1.5 bg-muted/30 rounded text-center">
                       <p className="text-[9px] text-muted-foreground">Adjusted Rate/mi</p>
                       <p className="text-xs font-bold tabular-nums">${bd.totalRatePerMile}/mi</p>
@@ -1219,8 +1219,8 @@ export default function Settings() {
           <CardTitle className="text-sm font-semibold">Expenses</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Column headers */}
-          <div className="flex items-center gap-2 px-3 pb-1 border-b border-border">
+          {/* Column headers — hidden on mobile, shown on sm+ */}
+          <div className="hidden sm:flex items-center gap-2 px-3 pb-1 border-b border-border">
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide w-20">Type</span>
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide flex-1">Name</span>
             <span className="text-[10px] text-muted-foreground uppercase tracking-wide w-28 text-right">Rate</span>

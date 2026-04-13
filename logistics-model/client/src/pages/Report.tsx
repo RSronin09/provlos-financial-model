@@ -841,7 +841,7 @@ export default function Report() {
           </div>
 
           {/* Summary comparisons */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             {[
               { label: "Total Cost/Mile", value: fmtD(costPerMile) + "/mi", color: "bg-red-50 border-red-200" },
               { label: "Revenue/Mile", value: fmtD(revenuePerMile) + "/mi", color: "bg-green-50 border-green-200" },
@@ -877,7 +877,7 @@ export default function Report() {
           </p>
 
           {/* Key parameters */}
-          <div className="grid grid-cols-3 gap-3 mb-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <div className="p-3 bg-muted/30 border border-border rounded-lg">
               <p className="text-xs text-muted-foreground mb-1">Fleet Trigger Rule</p>
               <p className="font-bold">1 driver / 10,000 mi</p>
@@ -1052,7 +1052,7 @@ export default function Report() {
             SECTION 8: BREAK-EVEN & COVERAGE ANALYSIS
         ══════════════════════════════════════════════════════════════ */}
         <Section num="8" title="Break-Even & Coverage Analysis">
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* 7A: BEP */}
             <div>
               <SubSection label="7A — Break-Even Point (BEP)" />
@@ -1128,7 +1128,7 @@ export default function Report() {
           </div>
 
           {/* BEP vs FCCR comparison box */}
-          <div className="mt-4 p-3 bg-muted/20 border border-border/60 rounded-lg grid grid-cols-2 gap-4 text-xs">
+          <div className="mt-4 p-3 bg-muted/20 border border-border/60 rounded-lg grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div>
               <p className="font-bold text-foreground mb-1">Break-Even Point answers:</p>
               <p className="text-muted-foreground">"What is the minimum revenue level I need to generate to cover all costs?" — Useful for pricing strategy, minimum load planning, and volume floor analysis.</p>
@@ -1352,7 +1352,7 @@ export default function Report() {
           {/* Scenario methodology */}
           <div className="p-3 bg-muted/30 border border-border rounded-lg text-xs">
             <p className="font-semibold mb-2">Scenario Methodology</p>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 { name: "Worst Case", desc: "Conservative volume assumptions — typically 70-80% of base miles, lower effective rates due to market pressure, reduced job type mix diversity." },
                 { name: "Base Case", desc: "Current configured trajectory — reflects the business model as set up, with incremental mile growth and proportional cost scaling." },
