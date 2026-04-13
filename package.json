@@ -1,5 +1,9 @@
 {
   "name": "provlos-financial-model",
   "private": true,
-  "description": "Monorepo root. The deployable app is in logistics-model/."
+  "description": "Monorepo root. The deployable app is in logistics-model/.",
+  "dependencies": {
+    "@libsql/client": "*",
+    "serverless-http": "*"
+  }
 }

@@ -1,5 +1,5 @@
 import serverless from "serverless-http";
-import { initializeApp } from "../../logistics-model/server/bootstrap";
+import { initializeApp } from "../logistics-model/server/bootstrap";
 
 let cached: ReturnType<typeof serverless> | null = null;
 
