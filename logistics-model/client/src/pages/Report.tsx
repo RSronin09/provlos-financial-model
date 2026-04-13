@@ -127,30 +127,64 @@ export default function Report() {
     if (!el) return;
     setPdfLoading(true);
     try {
+      // Temporarily fix width to 960px so html2canvas captures full desktop layout
+      // regardless of current viewport size (mobile users get the same PDF)
+      const prevWidth = el.style.width;
+      const prevMinWidth = el.style.minWidth;
+      el.style.width = "960px";
+      el.style.minWidth = "960px";
+      // Allow layout to reflow before capture
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Capture at 2x for crisp text, full element width
       const canvas = await html2canvas(el, {
         scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: "#ffffff",
+        windowWidth: 960,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
       });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+
+      // Restore original width
+      el.style.width = prevWidth;
+      el.style.minWidth = prevMinWidth;
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
       const pageW = pdf.internal.pageSize.getWidth();
       const pageH = pdf.internal.pageSize.getHeight();
-      const margin = 36; // 0.5in
-      const contentW = pageW - margin * 2;
-      const imgH = (canvas.height * contentW) / canvas.width;
-      let yOffset = 0;
-      let pageNum = 0;
-      while (yOffset < imgH) {
-        if (pageNum > 0) pdf.addPage();
-        pdf.addImage(imgData, "PNG", margin, margin - yOffset, contentW, imgH);
-        yOffset += pageH - margin * 2;
-        pageNum++;
+
+      // Scale image to fit page width exactly (no side margins — content has its own padding)
+      const imgW = pageW;
+      const imgH = (canvas.height / canvas.width) * imgW;
+
+      // Number of pages needed
+      const totalPages = Math.ceil(imgH / pageH);
+
+      for (let page = 0; page < totalPages; page++) {
+        if (page > 0) pdf.addPage();
+        // Shift the image up by one page height each iteration
+        pdf.addImage(
+          canvas.toDataURL("image/png"),
+          "PNG",
+          0,                    // x — flush to left
+          -(page * pageH),      // y — negative offset scrolls down through the image
+          imgW,
+          imgH,
+        );
       }
+
       const fileName = `${(data?.settings?.businessName ?? "report").replace(/\s+/g, "_")}_Financial_Report.pdf`;
       pdf.save(fileName);
+    } catch (err) {
+      console.error("PDF export failed:", err);
     } finally {
+      // Always restore width even if capture fails
+      if (reportRef.current) {
+        reportRef.current.style.width = "";
+        reportRef.current.style.minWidth = "";
+      }
       setPdfLoading(false);
     }
   }
