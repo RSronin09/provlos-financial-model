@@ -6,7 +6,6 @@ let cached = null;
 module.exports = async function handler(req, res) {
   try {
     if (!cached) {
-      // Load the pre-built CommonJS bundle produced by npm run build
       const bundlePath = path.join(__dirname, "..", "dist", "server.cjs");
       const { initializeApp } = require(bundlePath);
       const { app } = await initializeApp();

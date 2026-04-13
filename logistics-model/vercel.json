@@ -3,10 +3,10 @@
   "installCommand": "npm install",
   "outputDirectory": "dist/public",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api" }
+    { "source": "/api/:path*", "destination": "/api/index.cjs" }
   ],
   "functions": {
-    "api/index.js": {
+    "api/index.cjs": {
       "includeFiles": "dist/**"
     }
   }
