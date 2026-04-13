@@ -77,21 +77,6 @@ export default function Dashboard() {
     { name: "Fuel (Live)", value: expenses.monthlyFuelCost },
   ];
 
-  // Expense detail for bar chart
-  // Variable expenses use computedAmount (ratePerMile × miles), NOT flat amount (which is 0 for per-mile items)
-  const expenseBarData = [
-    ...expenses.fixed.map((e: any) => ({
-      name: e.name + (e.scalesWithFleet ? " (×fleet)" : ""),
-      amount: e.scalesWithFleet ? e.amount * currentFleet : e.amount,
-      type: "Fixed",
-    })),
-    ...expenses.variable.map((e: any) => ({
-      name: e.ratePerMile ? `${e.name} ($${e.ratePerMile}/mi)` : e.name,
-      amount: (e.computedAmount ?? e.amount) * currentFleet,
-      type: "Variable",
-    })),
-    { name: `Fuel (${fuelCost.costPerGallon?.toFixed(2)}/gal live)`, amount: expenses.monthlyFuelCost * currentFleet, type: "Fuel" },
-  ].sort((a: any, b: any) => b.amount - a.amount);
 
   // Base scenario projection for line chart
   const baseScenario = scenarioProjections?.find((s: any) => s.name === "Base Case");
@@ -380,8 +365,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Scenario Projections & Expense Detail */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Scenario Projections */}
+      <div>
         {/* 12-Month Scenario Projections */}
         <Card>
           <CardHeader className="pb-2">
@@ -400,7 +385,11 @@ export default function Dashboard() {
                 />
                 <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-                <Legend />
+                <Legend
+                  verticalAlign="top"
+                  wrapperStyle={{ paddingBottom: 8 }}
+                  formatter={(value) => <span style={{ fontSize: 11 }}>{value}</span>}
+                />
                 {scenarioProjections?.map((scenario: any, i: number) => (
                   <Line
                     key={scenario.name}
@@ -410,37 +399,10 @@ export default function Dashboard() {
                     stroke={CHART_COLORS[i]}
                     strokeWidth={2}
                     dot={false}
+                    legendType="line"
                   />
                 ))}
               </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Expense Detail Bar Chart */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">
-              All Expenses — Month 1
-              {currentFleet > 1 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">({currentFleet} vehicles)</span>}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={340}>
-              <BarChart data={expenseBarData} layout="vertical" margin={{ left: 10, right: 10, top: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,85%)" />
-                <XAxis type="number" tick={{ fontSize: 10 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={130} />
-                <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
-                <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
-                  {expenseBarData.map((entry: any, i: number) => (
-                    <Cell
-                      key={i}
-                      fill={entry.type === "Fixed" ? CHART_COLORS[0] : entry.type === "Variable" ? CHART_COLORS[1] : CHART_COLORS[3]}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
