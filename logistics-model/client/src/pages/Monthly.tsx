@@ -866,9 +866,9 @@ export default function Monthly() {
                           <XAxis dataKey="month" tick={{ fontSize: 9 }} />
                           <YAxis tick={{ fontSize: 9 }} tickFormatter={fmtK} />
                           <Tooltip formatter={(v: number) => fmt(v)} />
-                          <Legend wrapperStyle={{ fontSize: 10 }} />
-                          <Bar dataKey="Free CF" fill="hsl(160,50%,42%)" radius={[3,3,0,0]} />
-                          <Bar dataKey="CapEx"   fill="hsl(34,80%,50%)"  radius={[3,3,0,0]} />
+                          <Legend wrapperStyle={{ fontSize: 10 }} verticalAlign="top" />
+                          <Bar dataKey="Free CF" fill="hsl(160,50%,42%)" radius={[3,3,0,0]} legendType="square" />
+                          <Bar dataKey="CapEx"   fill="hsl(34,80%,50%)"  radius={[3,3,0,0]} legendType="square" />
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
@@ -1009,9 +1009,9 @@ export default function Monthly() {
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} verticalAlign="top" />
                   {scenarioProjections?.map((s: any) => (
-                    <Line key={s.name} dataKey={s.name} stroke={SCENARIO_COLORS[s.name] ?? "hsl(215,60%,40%)"} strokeWidth={2} dot={false} />
+                    <Line key={s.name} dataKey={s.name} stroke={SCENARIO_COLORS[s.name] ?? "hsl(215,60%,40%)"} strokeWidth={2} dot={false} legendType="circle" />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -1029,9 +1029,9 @@ export default function Monthly() {
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} verticalAlign="top" />
                   {scenarioProjections?.map((s: any) => (
-                    <Line key={s.name} dataKey={s.name} stroke={SCENARIO_COLORS[s.name] ?? "hsl(215,60%,40%)"} strokeWidth={2} dot={false} />
+                    <Line key={s.name} dataKey={s.name} stroke={SCENARIO_COLORS[s.name] ?? "hsl(215,60%,40%)"} strokeWidth={2} dot={false} legendType="circle" />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -1110,10 +1110,10 @@ export default function Monthly() {
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="Fixed" stackId="a" fill="hsl(215, 60%, 40%)" />
-                  <Bar dataKey="Variable" stackId="a" fill="hsl(34, 80%, 50%)" />
-                  <Bar dataKey="Fuel" stackId="a" fill="hsl(350, 55%, 48%)" radius={[4, 4, 0, 0]} />
+                  <Legend iconType="square" wrapperStyle={{ fontSize: 11 }} verticalAlign="top" />
+                  <Bar dataKey="Fixed" stackId="a" fill="hsl(215, 60%, 40%)" legendType="square" />
+                  <Bar dataKey="Variable" stackId="a" fill="hsl(34, 80%, 50%)" legendType="square" />
+                  <Bar dataKey="Fuel" stackId="a" fill="hsl(350, 55%, 48%)" radius={[4, 4, 0, 0]} legendType="square" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1130,10 +1130,10 @@ export default function Monthly() {
                   <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} tickFormatter={fmtK} />
                   <Tooltip formatter={(v: number) => fmt(v)} />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-                  <Line dataKey="Fixed" stroke="hsl(215, 60%, 40%)" strokeWidth={2} dot={false} />
-                  <Line dataKey="Variable" stroke="hsl(34, 80%, 50%)" strokeWidth={2} dot={false} />
-                  <Line dataKey="Fuel" stroke="hsl(350, 55%, 48%)" strokeWidth={2} dot={false} />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} verticalAlign="top" />
+                  <Line dataKey="Fixed" stroke="hsl(215, 60%, 40%)" strokeWidth={2} dot={false} legendType="circle" />
+                  <Line dataKey="Variable" stroke="hsl(34, 80%, 50%)" strokeWidth={2} dot={false} legendType="circle" />
+                  <Line dataKey="Fuel" stroke="hsl(350, 55%, 48%)" strokeWidth={2} dot={false} legendType="circle" />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>

@@ -81,6 +81,13 @@ export default function Dashboard() {
   // Base scenario projection for line chart
   const baseScenario = scenarioProjections?.find((s: any) => s.name === "Base Case");
 
+  // Shared dataset for 12-month scenario chart (one row per month, scenario names as keys)
+  const scenarioChartData = Array.from({ length: 12 }, (_, i) => {
+    const row: Record<string, any> = { month: i + 1 };
+    scenarioProjections?.forEach((s: any) => { row[s.name] = s.months[i]?.profit ?? 0; });
+    return row;
+  });
+
   return (
     <div className="p-6 space-y-6" data-testid="dashboard-page">
       {/* Header */}
@@ -374,12 +381,10 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={260}>
-              <LineChart>
+              <LineChart data={scenarioChartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(0,0%,85%)" />
                 <XAxis
                   dataKey="month"
-                  type="number"
-                  domain={[1, 12]}
                   tick={{ fontSize: 11 }}
                   tickFormatter={(m) => `M${m}`}
                 />
@@ -387,15 +392,12 @@ export default function Dashboard() {
                 <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
                 <Legend
                   verticalAlign="top"
-                  wrapperStyle={{ paddingBottom: 8 }}
-                  formatter={(value) => <span style={{ fontSize: 11 }}>{value}</span>}
+                  wrapperStyle={{ paddingBottom: 8, fontSize: 11 }}
                 />
                 {scenarioProjections?.map((scenario: any, i: number) => (
                   <Line
                     key={scenario.name}
-                    data={scenario.months}
-                    dataKey="profit"
-                    name={scenario.name}
+                    dataKey={scenario.name}
                     stroke={CHART_COLORS[i]}
                     strokeWidth={2}
                     dot={false}
