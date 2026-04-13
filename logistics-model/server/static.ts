@@ -1,11 +1,11 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { vercelAppRoot } from "./vercelPaths";
 
 function distPublicPath(): string {
+  // On Vercel, __dirname is not reliable — resolve from cwd
   if (process.env.VERCEL) {
-    return path.join(vercelAppRoot(), "dist", "public");
+    return path.join(process.cwd(), "dist", "public");
   }
   return path.resolve(__dirname, "public");
 }
