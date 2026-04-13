@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build && npx drizzle-kit push",
+  "buildCommand": "npm run build",
   "installCommand": "npm install",
   "outputDirectory": "dist/public",
   "rewrites": [
