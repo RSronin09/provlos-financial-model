@@ -73,7 +73,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <div className="text-lg font-bold text-foreground tabular-nums">
                 ${gasData.price?.toFixed(2)}<span className="text-xs font-normal text-muted-foreground">/gal</span>
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">{gasData.state} — Regular</div>
+              <div className="text-xs text-muted-foreground mt-0.5">National Avg (Source: EIA API)</div>
             </>
           ) : (
             <div className="text-sm text-muted-foreground">Loading...</div>

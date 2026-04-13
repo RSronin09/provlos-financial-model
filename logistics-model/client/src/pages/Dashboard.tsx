@@ -124,7 +124,7 @@ export default function Dashboard() {
         <KPICard
           title="Fuel Cost (Live)"
           value={`$${fuelCost.monthlyFuelCost.toLocaleString()}`}
-          subtitle={`${fuelCost.gallonsPerMonth} gal @ $${fuelCost.costPerGallon.toFixed(2)} · ${data.gasPriceSource ?? "static"}`}
+          subtitle={`${fuelCost.gallonsPerMonth} gal @ $${fuelCost.costPerGallon.toFixed(2)}/gal (EIA)`}
           icon={Fuel}
         />
         <KPICard
