@@ -6,8 +6,8 @@
     { "source": "/api/:path*", "destination": "/api" }
   ],
   "functions": {
-    "api/index.ts": {
-      "includeFiles": "dist/public/**"
+    "api/index.js": {
+      "includeFiles": "dist/**"
     }
   }
 }
