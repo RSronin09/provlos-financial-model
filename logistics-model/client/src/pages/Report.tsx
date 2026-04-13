@@ -3,7 +3,9 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Printer } from "lucide-react";
+import { Printer, Loader2 } from "lucide-react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -112,10 +114,46 @@ function UseOfProceedsSection({ businessName, initialValue }: { businessName: st
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function Report() {
+  const reportRef = useRef<HTMLDivElement>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ["/api/financial-summary"],
     queryFn: () => apiRequest("GET", "/api/financial-summary").then((r) => r.json()),
   });
+
+  async function handleExportPDF() {
+    const el = reportRef.current;
+    if (!el) return;
+    setPdfLoading(true);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 36; // 0.5in
+      const contentW = pageW - margin * 2;
+      const imgH = (canvas.height * contentW) / canvas.width;
+      let yOffset = 0;
+      let pageNum = 0;
+      while (yOffset < imgH) {
+        if (pageNum > 0) pdf.addPage();
+        pdf.addImage(imgData, "PNG", margin, margin - yOffset, contentW, imgH);
+        yOffset += pageH - margin * 2;
+        pageNum++;
+      }
+      const fileName = `${(data?.settings?.businessName ?? "report").replace(/\s+/g, "_")}_Financial_Report.pdf`;
+      pdf.save(fileName);
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   if (isLoading || !data) {
     return (
@@ -269,7 +307,7 @@ export default function Report() {
         }
       `}</style>
 
-      <div className="print-page p-8 max-w-5xl mx-auto" data-testid="report-page">
+      <div ref={reportRef} className="print-page p-8 max-w-5xl mx-auto bg-white" data-testid="report-page">
 
         {/* ══════════════════════════════════════════════════════════════
             COVER PAGE
@@ -282,8 +320,11 @@ export default function Report() {
               <h1 className="text-3xl font-bold text-foreground leading-tight">{businessName}</h1>
               <p className="text-base text-muted-foreground mt-1">Business Financial Summary &amp; Investor Report</p>
             </div>
-            <Button onClick={() => window.print()} variant="outline" size="sm" className="print:hidden mt-1" data-testid="button-print">
-              <Printer className="w-4 h-4 mr-1.5" />Print / PDF
+            <Button onClick={handleExportPDF} disabled={pdfLoading} variant="outline" size="sm" className="mt-1" data-testid="button-print">
+              {pdfLoading
+                ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Generating PDF…</>
+                : <><Printer className="w-4 h-4 mr-1.5" />Export PDF</>
+              }
             </Button>
           </div>
 
