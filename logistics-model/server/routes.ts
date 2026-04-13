@@ -408,7 +408,11 @@ export async function registerRoutes(server: Server, app: Express) {
     // Month 1 lease only applies to trucks ADDED beyond the 1 already owned
     const month1AdditionalTrucks = Math.max(0, driversByMonth[0] - 1);
     const month1Lease = month1AdditionalTrucks * (settings.monthlyLeasePayment ?? 0);
-    const totalFixed = fixedExpenses.reduce((sum, e) => sum + e.amount, 0) + month1Lease;
+    // Fixed expenses: scalesWithFleet expenses multiply by Month 1 driver count
+    const totalFixed = fixedExpenses.reduce((sum, e) => {
+      const multiplier = (e as any).scalesWithFleet ? autoDriverCount : 1;
+      return sum + e.amount * multiplier;
+    }, 0) + month1Lease;
 
     // For variable expenses: if ratePerMile is set, compute monthly cost = ratePerMile × totalMiles
     // otherwise use the flat amount. Store the computed monthly amount alongside each expense.

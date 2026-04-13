@@ -208,16 +208,27 @@ async function seedDefaults() {
 
   const existingExpenses = await storage.getExpenses();
   if (existingExpenses.length === 0) {
-    await storage.createExpense({ name: "Truck Lease Payments", category: "fixed", amount: 2200, description: "Monthly lease per truck", isActive: true });
-    await storage.createExpense({ name: "Commercial Insurance", category: "fixed", amount: 1800, description: "Liability + cargo insurance per truck", isActive: true });
-    await storage.createExpense({ name: "Registration & Permits", category: "fixed", amount: 250, description: "DOT, state permits, registration", isActive: true });
-    await storage.createExpense({ name: "GPS/Telematics", category: "fixed", amount: 150, description: "Fleet tracking subscription", isActive: true });
-    await storage.createExpense({ name: "Office & Admin", category: "fixed", amount: 1200, description: "Office rent, software, phone", isActive: true });
-    await storage.createExpense({ name: "Driver Wages", category: "fixed", amount: 8500, description: "Base wages for drivers (total fleet)", isActive: true });
+    // scalesWithFleet=true: per-truck costs that multiply by driver count
+    await storage.createExpense({ name: "Truck Lease Payments", category: "fixed", amount: 2200, description: "Monthly lease per truck", isActive: true, scalesWithFleet: true });
+    await storage.createExpense({ name: "Commercial Insurance", category: "fixed", amount: 1800, description: "Liability + cargo insurance per truck", isActive: true, scalesWithFleet: true });
+    await storage.createExpense({ name: "Registration & Permits", category: "fixed", amount: 250, description: "DOT, state permits, registration", isActive: true, scalesWithFleet: true });
+    await storage.createExpense({ name: "GPS/Telematics", category: "fixed", amount: 150, description: "Fleet tracking subscription", isActive: true, scalesWithFleet: true });
+    await storage.createExpense({ name: "Driver Wages", category: "fixed", amount: 8500, description: "Base wages per driver", isActive: true, scalesWithFleet: true });
+    // scalesWithFleet=false: business-level fixed costs that don't change with fleet size
+    await storage.createExpense({ name: "Office & Admin", category: "fixed", amount: 1200, description: "Office rent, software, phone", isActive: true, scalesWithFleet: false });
     await storage.createExpense({ name: "Maintenance & Repairs", category: "variable", amount: 800, description: "Avg monthly across fleet", isActive: true });
     await storage.createExpense({ name: "Tires", category: "variable", amount: 400, description: "Monthly tire budget", isActive: true });
     await storage.createExpense({ name: "Tolls & Parking", category: "variable", amount: 350, description: "Route-dependent tolls", isActive: true });
     await storage.createExpense({ name: "Driver Overtime / Bonuses", category: "variable", amount: 600, description: "Performance bonuses, overtime", isActive: true });
+  } else {
+    // Update existing rows to set scalesWithFleet correctly for per-truck expenses
+    const perTruckNames = ["Truck Lease Payments", "Commercial Insurance", "Registration & Permits", "GPS/Telematics", "Driver Wages"];
+    for (const expense of existingExpenses) {
+      const shouldScale = perTruckNames.includes(expense.name);
+      if ((expense as any).scalesWithFleet !== shouldScale) {
+        await storage.updateExpense(expense.id, { scalesWithFleet: shouldScale } as any);
+      }
+    }
   }
 
   const existingScenarios = await storage.getScenarios();
