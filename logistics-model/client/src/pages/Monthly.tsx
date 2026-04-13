@@ -612,6 +612,8 @@ export default function Monthly() {
                       expenses: weeks.reduce((s, w) => s + w.expenses, 0),
                       profit: weeks.reduce((s, w) => s + w.profit, 0),
                       fuel: weeks.reduce((s, w) => s + w.fuel, 0),
+                      variable: weeks.reduce((s, w) => s + (w.variable ?? 0), 0),
+                      fixed: weeks.reduce((s, w) => s + (w.fixed ?? 0), 0),
                     };
                     return weeks.map((week: any, wi: number) => {
                       const isLastWeek = wi === weeks.length - 1;
@@ -660,13 +662,21 @@ export default function Monthly() {
                           </tr>
                           {isLastWeek && (
                             <tr className="bg-muted/40 border-b-2 border-border font-semibold text-xs">
+                              {/* Col 1: Month (sticky) */}
                               <td className="sticky left-0 z-10 bg-muted/40 px-3 py-1.5 text-center border-r border-border/30 text-[10px] text-muted-foreground">—</td>
-                              <td className="px-3 py-1.5 text-center text-[10px] text-muted-foreground" colSpan={2}>M{mi+1} Total</td>
+                              {/* Cols 2-5: Week / Miles / Drivers / Capacity — span all 4 */}
+                              <td className="px-3 py-1.5 text-center text-[10px] text-muted-foreground" colSpan={4}>M{mi+1} Total</td>
+                              {/* Col 6: Revenue */}
                               <td className="px-3 py-1.5 text-right tabular-nums text-chart-3">{fmt(monthTotal.revenue)}</td>
+                              {/* Col 7: Fuel */}
                               <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(monthTotal.fuel)}</td>
-                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground"></td>
-                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground"></td>
+                              {/* Col 8: Variable */}
+                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(weeks.reduce((s, w) => s + (w.variable ?? 0), 0))}</td>
+                              {/* Col 9: Fixed */}
+                              <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">{fmt(weeks.reduce((s, w) => s + (w.fixed ?? 0), 0))}</td>
+                              {/* Col 10: Total Exp */}
                               <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">({fmt(monthTotal.expenses)})</td>
+                              {/* Col 11: Net Profit */}
                               <td className={`px-3 py-1.5 text-right tabular-nums font-bold ${
                                 monthTotal.profit >= 0 ? 'text-chart-3' : 'text-destructive'
                               }`}>{fmt(monthTotal.profit)}</td>
