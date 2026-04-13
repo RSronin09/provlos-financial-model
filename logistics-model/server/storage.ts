@@ -22,8 +22,13 @@ import {
   type ChatMessage,
 } from "@shared/schema";
 
+// Use the HTTP-based Turso client in serverless environments so the
+// WebSocket connection doesn't keep the event loop alive after each request.
+const tursoUrl = process.env.TURSO_DATABASE_URL ?? "file:local.db";
 const client = createClient({
-  url: process.env.TURSO_DATABASE_URL ?? "file:local.db",
+  url: process.env.VERCEL
+    ? tursoUrl.replace(/^libsql:\/\//, "https://")
+    : tursoUrl,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 const db = drizzle(client);
