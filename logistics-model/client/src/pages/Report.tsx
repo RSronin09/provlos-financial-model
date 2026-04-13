@@ -151,28 +151,40 @@ export default function Report() {
       el.style.width = prevWidth;
       el.style.minWidth = prevMinWidth;
 
-      const pdf = new jsPDF({ orientation: "portrait", unit: "px", format: "a4" });
-      const pageW = pdf.internal.pageSize.getWidth();
-      const pageH = pdf.internal.pageSize.getHeight();
+      const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
+      const pageW = pdf.internal.pageSize.getWidth();  // 612pt
+      const pageH = pdf.internal.pageSize.getHeight(); // 792pt
+      const margin = 40; // pt — left/right/top/bottom margin
 
-      // Scale image to fit page width exactly (no side margins — content has its own padding)
-      const imgW = pageW;
-      const imgH = (canvas.height / canvas.width) * imgW;
+      // Content area inside margins
+      const contentW = pageW - margin * 2;
+      // Scale image to fit content width
+      const scale = contentW / canvas.width;
+      const imgW = contentW;
+      const imgH = canvas.height * scale;
 
-      // Number of pages needed
-      const totalPages = Math.ceil(imgH / pageH);
+      // Usable height per page (between top and bottom margins)
+      const usableH = pageH - margin * 2;
+      const totalPages = Math.ceil(imgH / usableH);
+
+      const imgData = canvas.toDataURL("image/png");
 
       for (let page = 0; page < totalPages; page++) {
         if (page > 0) pdf.addPage();
-        // Shift the image up by one page height each iteration
-        pdf.addImage(
-          canvas.toDataURL("image/png"),
-          "PNG",
-          0,                    // x — flush to left
-          -(page * pageH),      // y — negative offset scrolls down through the image
-          imgW,
-          imgH,
-        );
+        // y position: start at top margin, shift image up by one usable page height per page
+        const yPos = margin - page * usableH;
+        pdf.addImage(imgData, "PNG", margin, yPos, imgW, imgH);
+
+        // White rectangles to mask content that bleeds into the margin areas
+        // Top mask
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, pageW, margin, "F");
+        // Bottom mask
+        pdf.rect(0, pageH - margin, pageW, margin, "F");
+        // Left mask
+        pdf.rect(0, 0, margin, pageH, "F");
+        // Right mask
+        pdf.rect(pageW - margin, 0, margin, pageH, "F");
       }
 
       const fileName = `${(data?.settings?.businessName ?? "report").replace(/\s+/g, "_")}_Financial_Report.pdf`;
