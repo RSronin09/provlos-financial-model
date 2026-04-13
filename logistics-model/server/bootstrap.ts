@@ -5,6 +5,7 @@ import { createServer } from "http";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { log } from "./logger";
+import { ensureSeeded } from "./storage";
 
 declare module "http" {
   interface IncomingMessage {
@@ -52,6 +53,7 @@ export async function initializeApp(): Promise<{ app: Express; httpServer: Serve
     next();
   });
 
+  ensureSeeded();
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {

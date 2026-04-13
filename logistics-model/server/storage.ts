@@ -33,7 +33,7 @@ async function runMigrations() {
   try { await client.execute(`ALTER TABLE business_settings ADD COLUMN truck_down_payment REAL NOT NULL DEFAULT 5000`); } catch {}
   try { await client.execute(`ALTER TABLE business_settings ADD COLUMN monthly_lease_payment REAL NOT NULL DEFAULT 800`); } catch {}
 }
-runMigrations().catch(() => {});
+// Migrations run lazily via ensureSeeded() — not at module load time
 
 export interface IStorage {
   getSettings(): Promise<BusinessSettings | undefined>;
@@ -183,8 +183,12 @@ export class DatabaseStorage implements IStorage {
 
 export const storage = new DatabaseStorage();
 
-// Seed default data on first run
+// Seed default data on first run — runs lazily on first request to avoid
+// blocking the serverless function cold start with multiple sequential DB calls.
+let seedPromise: Promise<void> | null = null;
+
 async function seedDefaults() {
+  await runMigrations();
   const settings = await storage.getSettings();
   if (!settings) {
     await storage.upsertSettings({
@@ -219,4 +223,9 @@ async function seedDefaults() {
   }
 }
 
-seedDefaults().catch(console.error);
+export function ensureSeeded(): Promise<void> {
+  if (!seedPromise) {
+    seedPromise = seedDefaults().catch(console.error) as Promise<void>;
+  }
+  return seedPromise;
+}
