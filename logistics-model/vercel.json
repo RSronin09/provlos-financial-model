@@ -7,7 +7,7 @@
   ],
   "functions": {
     "api/index.ts": {
-      "includeFiles": "dist/**"
+      "includeFiles": "dist/**,node_modules/@libsql/**,node_modules/drizzle-orm/**"
     }
   }
 }
